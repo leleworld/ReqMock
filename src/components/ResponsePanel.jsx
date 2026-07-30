@@ -62,8 +62,8 @@ export default function ResponsePanel({
     setTreeData(null); // 重置 Tree 缓存
     const body = response.body;
     const id = ++fmtIdRef.current;
-    // ≤100KB 同步处理（<1ms），避免 Worker postMessage 开销
-    if (body.length <= 100000) {
+    // ≤500KB 同步处理（实测 <30ms）：避免 Worker 异步返回前 fmtResult=null 导致搜索视图瞬间显示未格式化原文
+    if (body.length <= 500000) {
       try {
         const pretty = JSON.stringify(JSON.parse(body), null, 2);
         setFmtResult({ pretty, isJson: true });
@@ -72,19 +72,21 @@ export default function ResponsePanel({
       }
       return;
     }
-    // 大响应：先展示原始 body，Worker 后台格式化完成后自动替换
+    // 超大响应（>500KB）：先展示原始 body，Worker 后台格式化完成后自动替换
     setFmtResult(null);
     workerRef.current.postMessage({ id, body });
   }, [response]);
 
   // Pretty 视图文本 + 高亮 token（小响应同步 tokenize，大响应跳过 token 走 CodeMirror 内置高亮）
-  const { prettyBody, tokens } = useMemo(() => {
-    if (!response || !response.ok) return { prettyBody: '', tokens: null };
+  const { prettyBody, tokens, fmtPending } = useMemo(() => {
+    if (!response || !response.ok) return { prettyBody: '', tokens: null, fmtPending: false };
+    // fmtResult 尚未就绪（Worker 处理中）时标记 pending，搜索视图回退 CodeMirror 避免显示原始单行 JSON
+    const pending = !fmtResult && response.body.length > 500000;
     const body = fmtResult ? fmtResult.pretty : response.body;
     if (body.length <= HIGHLIGHT_MAX_LENGTH && fmtResult && fmtResult.isJson) {
-      return { prettyBody: body, tokens: tokenizeJson(body) };
+      return { prettyBody: body, tokens: tokenizeJson(body), fmtPending: false };
     }
-    return { prettyBody: body, tokens: null };
+    return { prettyBody: body, tokens: null, fmtPending: pending };
   }, [response, fmtResult]);
 
   // Tree 视图解析：按需懒解析（仅在用户切到 Tree 视图时执行，不再重复 parse）
@@ -490,11 +492,12 @@ export default function ResponsePanel({
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
         {/* 页签/视图切换时整体缓动入场；滚动容器下沉到 pane 层 */}
         <motion.div className="response-pane" key={`${tab}-${view}`} {...tabIn}>
-        {/* Pretty 视图：CodeMirror 只读展示（行号 + 层级折叠）；面板搜索激活时回退 mark 渲染保证命中定位 */}
-        {tab === 'body' && view === 'pretty' && !searchActive && (
+        {/* Pretty 视图：CodeMirror 只读展示（行号 + 层级折叠）；面板搜索激活时回退 mark 渲染保证命中定位
+             fmtPending 时仍用 CodeMirror（内置 JSON 高亮），避免 Worker 完成前搜索视图显示未格式化原文 */}
+        {tab === 'body' && view === 'pretty' && (!searchActive || fmtPending) && (
           <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
         )}
-        {tab === 'body' && ((view === 'pretty' && searchActive) || view === 'raw') && (
+        {tab === 'body' && ((view === 'pretty' && searchActive && !fmtPending) || view === 'raw') && (
           <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
         )}
         {tab === 'body' && view === 'tree' && (

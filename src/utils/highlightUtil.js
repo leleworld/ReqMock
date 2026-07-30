@@ -3,8 +3,8 @@
  * token 类型：key / string / number / boolean / null / plain
  */
 
-/** 超过该长度不做高亮，避免大响应卡顿 */
-export const HIGHLIGHT_MAX_LENGTH = 300000;
+/** 超过该长度不做高亮，避免大响应卡顿（tokenizeJson 为 O(n) 正则，1MB 内 <80ms） */
+export const HIGHLIGHT_MAX_LENGTH = 1000000;
 
 const TOKEN_RE = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
 
