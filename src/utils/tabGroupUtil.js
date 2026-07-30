@@ -1,7 +1,7 @@
 /**
  * 标签页分组（Chrome 式）：
  *   - 手动分组：右键把标签加入分组，可命名 / 换色 / 折叠
- *   - 自动分组：多个标签打开相同 URI 的接口时自动归入同一分组
+ *   - 自动分组：多个标签打开相同 URI 的接口时自动归入同一分组（忽略域名与端口，仅比较路径）
  * 数据模型：
  *   group = { id, name, color, collapsed, auto, urlKey }
  *   tab.groupId 指向所属分组（无分组则为 undefined/null）
@@ -13,16 +13,21 @@ export const GROUP_COLORS = [
   '#d96fbf', '#9a6fd9', '#3fbdc4', '#e08a4c'
 ];
 
-/** 归一化请求 URI 作为自动分组键：去协议差异无关部分（query/hash/尾斜杠），保留 host+path */
+/**
+ * 归一化请求 URI 作为自动分组键：
+ *   去协议 / 域名 / 端口 / query / hash / 尾斜杠，仅保留路径 ——
+ *   同一接口部署在不同环境（如线上域名与本地端口）时也能归入同组。
+ *   无路径的 URL 退化为 host（去端口小写），避免不同站点根地址误合并。
+ */
 export function urlGroupKey(url) {
   if (!url || !url.trim()) return '';
   let s = url.trim();
   // 去掉 query 与 hash
   const qi = s.search(/[?#]/);
   if (qi >= 0) s = s.slice(0, qi);
-  // 去协议前缀，host 部分统一小写
+  // 拆出协议 / host / path，仅取 path；无 path 时退化为 host（去端口、小写）
   const m = s.match(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)?([^/]*)(\/.*)?$/);
-  if (m) s = (m[2] || '').toLowerCase() + (m[3] || '');
+  if (m) s = m[3] || (m[2] || '').replace(/:\d+$/, '').toLowerCase();
   // 去尾斜杠（根路径除外）
   if (s.length > 1 && s.endsWith('/')) s = s.slice(0, -1);
   return s;

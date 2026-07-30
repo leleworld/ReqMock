@@ -19,13 +19,17 @@ const uuid = () => 'g' + (++seq);
 const reqTab = (id, url, groupId) => ({ id, kind: 'request', request: { url }, groupId });
 
 // ---- 1. URI 归一化 ----
-check('urlGroupKey 去 query/hash', urlGroupKey('http://a.com/api/user?id=1#top') === 'a.com/api/user');
-check('urlGroupKey 去协议', urlGroupKey('https://a.com/api/user') === urlGroupKey('http://a.com/api/user'));
-check('urlGroupKey host 小写', urlGroupKey('http://A.COM/Api/User') === 'a.com/Api/User');
-check('urlGroupKey 去尾斜杠', urlGroupKey('http://a.com/api/') === 'a.com/api');
+check('urlGroupKey 去 query/hash', urlGroupKey('http://a.com/api/user?id=1#top') === '/api/user');
+check('urlGroupKey 路径匹配忽略域名', urlGroupKey('https://a.com/api/user') === urlGroupKey('http://b.com/api/user'));
+check('urlGroupKey 路径区分大小写', urlGroupKey('http://A.COM/Api/User') === '/Api/User');
+check('urlGroupKey 去尾斜杠', urlGroupKey('http://a.com/api/') === '/api');
 check('urlGroupKey 空 URL 返回空', urlGroupKey('') === '' && urlGroupKey('   ') === '');
-check('urlGroupKey 无协议原样归一', urlGroupKey('a.com/api?x=1') === 'a.com/api');
-check('groupNameFromKey 取最后路径段', groupNameFromKey('a.com/api/v1/search') === 'search');
+check('urlGroupKey 无协议原样归一', urlGroupKey('a.com/api?x=1') === '/api');
+check('urlGroupKey 无路径退化为 host', urlGroupKey('http://a.com') === 'a.com' && urlGroupKey('http://a.com:8080') === 'a.com');
+check('urlGroupKey 不同域名+相同路径合并',
+  urlGroupKey('http://10.18.210.168/api/v1.2.0/searchApi/directWord') ===
+  urlGroupKey('http://localhost:16407/api/v1.2.0/searchApi/directWord'));
+check('groupNameFromKey 取最后路径段', groupNameFromKey('/api/v1/search') === 'search');
 check('groupNameFromKey 无路径用 host', groupNameFromKey('a.com') === 'a.com');
 
 // ---- 2. 颜色分配 ----

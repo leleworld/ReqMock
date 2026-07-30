@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { GROUP_COLORS } from '../utils/tabGroupUtil.js';
+import { tabIn } from '../utils/motionPresets.js';
 
 /**
  * 主区统一标签栏：请求 / 环境 / Cookie / Mock / 工具都以标签页承载（Reqable 式）
  * 非请求标签由 tabMeta 提供图标与名称
- * 支持 Chrome 式标签分组：分组徽标 + 组色下划线 + 折叠；右键菜单管理分组
+ * 支持 Chrome 式标签分组：同组标签包进组色容器（徽标 + 底色条），可折叠；右键菜单管理分组
  */
 export default function TabBar({
   tabs, groups, activeTabId, tabMeta,
@@ -35,41 +37,15 @@ export default function TabBar({
   const groupOf = (gid) => (groups || []).find((g) => g.id === gid) || null;
   const memberCount = (gid) => tabs.filter((t) => t.groupId === gid).length;
 
-  // 按顺序渲染：进入新分组时先插入分组徽标；折叠的分组只保留激活标签
-  const items = [];
-  let prevGroupId = null;
-  tabs.forEach((tab) => {
-    const group = tab.groupId ? groupOf(tab.groupId) : null;
-    const gid = group ? group.id : null;
-    if (gid && gid !== prevGroupId) {
-      items.push(
-        <div
-          key={'chip-' + gid}
-          className={`tab-group-chip ${group.collapsed ? 'collapsed' : ''}`}
-          style={{ background: group.color }}
-          title={`分组「${group.name}」（${memberCount(gid)} 个标签）\n单击折叠/展开，右键管理分组`}
-          onClick={() => onToggleGroupCollapse(gid)}
-          onContextMenu={(e) => openMenu(e, { type: 'group', groupId: gid })}
-        >
-          {group.name}{group.collapsed ? ` · ${memberCount(gid)}` : ''}
-        </div>
-      );
-    }
-    prevGroupId = gid;
-    if (group && group.collapsed && tab.id !== activeTabId) return;
-
+  // 单个标签渲染（组内/组外通用，组色由容器 CSS 变量接管）
+  const renderTab = (tab) => {
     const isReq = !tab.kind || tab.kind === 'request';
     const meta = isReq ? null : tabMeta(tab);
     const active = tab.id === activeTabId;
-    const groupLine = group ? `inset 0 -2px 0 ${group.color}` : '';
-    const style = group
-      ? { boxShadow: active ? `inset 0 2px 0 var(--accent), ${groupLine}` : groupLine }
-      : undefined;
-    items.push(
+    return (
       <div
         key={tab.id}
-        className={`tab-item ${active ? 'active' : ''} ${group ? 'in-group' : ''}`}
-        style={style}
+        className={`tab-item ${active ? 'active' : ''} ${tab.groupId ? 'in-group' : ''}`}
         title={isReq ? (tab.request.url || tab.request.name) : meta.title}
         onClick={() => onSelect(tab.id)}
         onContextMenu={(e) => openMenu(e, { type: 'tab', tabId: tab.id })}
@@ -88,7 +64,45 @@ export default function TabBar({
         >×</span>
       </div>
     );
-  });
+  };
+
+  // 按顺序渲染：同组连续标签包进带组色底条的容器；折叠的分组只保留激活标签
+  const items = [];
+  let i = 0;
+  while (i < tabs.length) {
+    const tab = tabs[i];
+    const group = tab.groupId ? groupOf(tab.groupId) : null;
+    if (!group) {
+      items.push(renderTab(tab));
+      i++;
+      continue;
+    }
+    const members = [];
+    while (i < tabs.length && tabs[i].groupId === group.id) {
+      members.push(tabs[i]);
+      i++;
+    }
+    const shown = group.collapsed ? members.filter((t) => t.id === activeTabId) : members;
+    items.push(
+      <motion.div
+        key={'grp-' + group.id}
+        className={`tab-group ${group.collapsed ? 'collapsed' : ''}`}
+        style={{ '--group-color': group.color }}
+        {...tabIn}
+      >
+        <div
+          className="tab-group-chip"
+          title={`分组「${group.name}」（${members.length} 个标签）\n单击折叠/展开，右键管理分组`}
+          onClick={() => onToggleGroupCollapse(group.id)}
+          onContextMenu={(e) => openMenu(e, { type: 'group', groupId: group.id })}
+        >
+          <span className="tab-group-name">{group.name}</span>
+          <span className="tab-group-count">{members.length}</span>
+        </div>
+        {shown.map(renderTab)}
+      </motion.div>
+    );
+  }
 
   const menuTab = menu && menu.type === 'tab' ? tabs.find((t) => t.id === menu.tabId) : null;
   const menuGroup = menu && menu.type === 'group' ? groupOf(menu.groupId) : null;
