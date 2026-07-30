@@ -789,17 +789,25 @@ export default function App() {
     });
   };
 
-  /** 把标签加入已有分组；自动组被手动加人后转为手动组，避免被自动逻辑拆散 */
+  /** 把标签加入已有分组；自动组被手动加人后转为手动组，并把该标签从排除名单中放出 */
   const handleAssignGroup = (tabId, groupId) => {
-    setTabGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, auto: false } : g)));
+    setTabGroups((prev) => prev.map((g) => (
+      g.id === groupId
+        ? { ...g, auto: false, excludedTabIds: (g.excludedTabIds || []).filter((id) => id !== tabId) }
+        : g
+    )));
     setTabs((prev) => reorderTabsByGroup(prev.map((t) => (t.id === tabId ? { ...t, groupId } : t))));
   };
 
-  /** 把标签移出分组；若原组是自动组则转手动，防止相同 URI 规则立刻把它拉回去 */
+  /** 把标签移出分组；记入该组排除名单，相同 URI 规则不会把它拉回去，也不影响其他同 URI 标签继续归组 */
   const handleLeaveGroup = (tabId) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (tab && tab.groupId) {
-      setTabGroups((prev) => prev.map((g) => (g.id === tab.groupId ? { ...g, auto: false } : g)));
+      setTabGroups((prev) => prev.map((g) => (
+        g.id === tab.groupId
+          ? { ...g, excludedTabIds: [...new Set([...(g.excludedTabIds || []), tabId])] }
+          : g
+      )));
     }
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, groupId: undefined } : t)));
   };
@@ -824,10 +832,10 @@ export default function App() {
     setTabGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g)));
   };
 
-  /** 解散分组但保留标签；自动组记入 dismissed，会话内不再重建 */
+  /** 解散分组但保留标签；URI 组（含手动化的）记入 dismissed，会话内不再重建 */
   const handleUngroup = (groupId) => {
     const group = tabGroups.find((g) => g.id === groupId);
-    if (group && group.auto && group.urlKey) dismissedGroupKeysRef.current.add(group.urlKey);
+    if (group && group.urlKey) dismissedGroupKeysRef.current.add(group.urlKey);
     setTabGroups((prev) => prev.filter((g) => g.id !== groupId));
     setTabs((prev) => prev.map((t) => (t.groupId === groupId ? { ...t, groupId: undefined } : t)));
   };
@@ -845,7 +853,7 @@ export default function App() {
       });
       return;
     }
-    if (group && group.auto && group.urlKey) dismissedGroupKeysRef.current.add(group.urlKey);
+    if (group && group.urlKey) dismissedGroupKeysRef.current.add(group.urlKey);
     setTabGroups((prev) => prev.filter((g) => g.id !== groupId));
     tabs.filter((t) => t.groupId === groupId).forEach(closeRealtime);
     const next = tabs.filter((t) => t.groupId !== groupId);

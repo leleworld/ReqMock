@@ -699,7 +699,8 @@ body.resizing { user-select: none; cursor: col-resize; }
 }
 .tab-item {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 8px 6px 10px;
+  padding: 9px 8px 9px 10px;
+  min-height: 34px;
   max-width: 200px; min-width: 0;
   border-radius: var(--radius-m) var(--radius-m) 0 0;
   cursor: pointer; user-select: none;
@@ -722,7 +723,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 .tab-close:hover { color: var(--red); background: var(--bg-hover); }
 .tab-add {
   background: none; border: none; color: var(--text-dim);
-  font-size: 14px; padding: 4px 8px; border-radius: var(--radius-s); cursor: pointer;
+  font-size: 14px; padding: 7px 10px; border-radius: var(--radius-s); cursor: pointer;
   flex-shrink: 0;
 }
 .tab-add:hover { background: var(--bg-hover); color: var(--text); }
@@ -744,7 +745,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-group-chip {
   display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
-  padding: 2px 8px;
+  padding: 4px 9px;
   border-radius: 999px;
   background: var(--group-color);
   color: #fff; font-size: 11px; font-weight: 600; line-height: 1.6;

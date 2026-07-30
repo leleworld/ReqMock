@@ -3,8 +3,9 @@
  *   - 手动分组：右键把标签加入分组，可命名 / 换色 / 折叠
  *   - 自动分组：多个标签打开相同 URI 的接口时自动归入同一分组（忽略域名与端口，仅比较路径）
  * 数据模型：
- *   group = { id, name, color, collapsed, auto, urlKey }
+ *   group = { id, name, color, collapsed, auto, urlKey, excludedTabIds? }
  *   tab.groupId 指向所属分组（无分组则为 undefined/null）
+ *   excludedTabIds：被用户从组中移出的标签 id，自动归组不再把它们拉回
  */
 
 /** 分组配色盘（Chrome 风格 8 色，循环取用） */
@@ -72,16 +73,43 @@ export function reorderTabsByGroup(tabs) {
  * 规则：
  *   - 仅对请求类标签生效，且不打扰手动分组（已在手动组内的标签不动）
  *   - 相同 urlKey 的 2+ 个标签 → 归入同一自动组（组按 urlKey 记忆，已存在则复用）
+ *   - urlKey 相同的分组只保留最先出现的一个（历史残留的重复组自动合并），
+ *     手动化的 URI 组也继续吸纳同 URI 的新标签，避免出现两个同名分组
+ *   - excludedTabIds 中的标签（用户主动移出过）不再被拉回该组
  *   - 自动组成员不足 2 个时解散该组
  *   - dismissedKeys：用户主动解散过的自动组 urlKey，不再重建
  * 返回 { tabs, groups, changed }；changed=false 表示无需 setState。
  */
 export function applyAutoGroups(tabs, groups, uuid, dismissedKeys) {
   const dismissed = dismissedKeys instanceof Set ? dismissedKeys : new Set(dismissedKeys || []);
-  const manualIds = new Set(groups.filter((g) => !g.auto).map((g) => g.id));
+
+  // 0. 合并 urlKey 重复的分组：任一方为手动则保持手动，排除名单取并集，成员改挂到保留组
+  const keyIndex = new Map(); // urlKey -> mergedGroups 下标
+  const remap = new Map();    // 被合并组 id -> 保留组 id
+  const mergedGroups = [];
+  for (const g of groups) {
+    const idx = g.urlKey ? keyIndex.get(g.urlKey) : undefined;
+    if (idx !== undefined) {
+      const owner = mergedGroups[idx];
+      remap.set(g.id, owner.id);
+      mergedGroups[idx] = {
+        ...owner,
+        auto: owner.auto && g.auto,
+        excludedTabIds: [...new Set([...(owner.excludedTabIds || []), ...(g.excludedTabIds || [])])]
+      };
+      continue;
+    }
+    if (g.urlKey) keyIndex.set(g.urlKey, mergedGroups.length);
+    mergedGroups.push(g);
+  }
+  const baseTabs = remap.size === 0 ? tabs : tabs.map((t) => (
+    t.groupId && remap.has(t.groupId) ? { ...t, groupId: remap.get(t.groupId) } : t
+  ));
+
+  const manualIds = new Set(mergedGroups.filter((g) => !g.auto).map((g) => g.id));
   // 1. 统计可自动分组标签的 urlKey
   const keyTabs = new Map(); // urlKey -> tabId[]
-  for (const tab of tabs) {
+  for (const tab of baseTabs) {
     const isReq = !tab.kind || tab.kind === 'request';
     if (!isReq || (tab.groupId && manualIds.has(tab.groupId))) continue;
     const key = urlGroupKey(tab.request ? tab.request.url : '');
@@ -90,25 +118,29 @@ export function applyAutoGroups(tabs, groups, uuid, dismissedKeys) {
     keyTabs.get(key).push(tab.id);
   }
 
-  // 2. 为 2+ 成员的 urlKey 建/找自动组，并计算每个标签的目标 groupId
-  let nextGroups = groups.slice();
+  // 2. 计算每个标签的目标 groupId：同 urlKey 的组已存在（含手动化的 URI 组）则直接吸纳，
+  //    否则 2+ 成员才新建自动组；排除名单中的标签不参与
+  let nextGroups = mergedGroups.slice();
   const target = new Map(); // tabId -> groupId
   for (const [key, ids] of keyTabs) {
-    if (ids.length < 2 || dismissed.has(key)) continue;
-    let group = nextGroups.find((g) => g.auto && g.urlKey === key);
+    if (dismissed.has(key)) continue;
+    let group = nextGroups.find((g) => g.urlKey === key);
+    const excluded = new Set((group && group.excludedTabIds) || []);
+    const eligible = ids.filter((id) => !excluded.has(id));
     if (!group) {
+      if (eligible.length < 2) continue;
       group = {
         id: uuid(), name: groupNameFromKey(key), color: pickGroupColor(nextGroups),
         collapsed: false, auto: true, urlKey: key
       };
       nextGroups = [...nextGroups, group];
     }
-    ids.forEach((id) => target.set(id, group.id));
+    eligible.forEach((id) => target.set(id, group.id));
   }
 
   // 3. 应用目标分配：手动组成员保持，其余以 target 为准（不在 target 中则脱离自动组）
-  let tabsChanged = false;
-  let nextTabs = tabs.map((tab) => {
+  let tabsChanged = remap.size > 0;
+  let nextTabs = baseTabs.map((tab) => {
     const keep = tab.groupId && manualIds.has(tab.groupId);
     const want = keep ? tab.groupId : target.get(tab.id) || null;
     const cur = tab.groupId || null;

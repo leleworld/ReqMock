@@ -2,6 +2,7 @@
  * 标签分组冒烟测试（无 GUI）：
  *   node tabgroup-smoke-test.mjs
  * 覆盖：URI 归一化 / 自动分组建立与解散 / 手动分组保护 / 折叠聚拢排序 / dismissed 抑制
+ *       同键重复组合并 / 手动化 URI 组吸纳新标签 / excludedTabIds 不拉回
  */
 import {
   urlGroupKey, groupNameFromKey, pickGroupColor,
@@ -101,6 +102,49 @@ const r7 = applyAutoGroups([
   reqTab('a', 'http://x.com/api/login')
 ], [], uuid);
 check('页面标签不参与自动分组', r7.groups.length === 0 && r7.changed === false);
+
+// ---- 9. 同 urlKey 重复分组合并（历史残留的同名组不再并存） ----
+const dupA = { id: 'dg1', name: 'login', color: '#111', collapsed: false, auto: false, urlKey: '/api/login' };
+const dupB = { id: 'dg2', name: 'login', color: '#222', collapsed: false, auto: true, urlKey: '/api/login' };
+const dupTabs = [
+  reqTab('a', 'http://x.com/api/login', 'dg1'),
+  reqTab('b', 'http://y.com/api/login', 'dg1'),
+  reqTab('c', 'http://x.com/api/login', 'dg2'),
+  reqTab('d', 'https://z.com/api/login?q=1', 'dg2')
+];
+const r8 = applyAutoGroups(dupTabs, [dupA, dupB], uuid);
+check('同键重复组合并为一个', r8.changed && r8.groups.length === 1 && r8.groups[0].id === 'dg1');
+check('合并后保持手动属性', r8.groups[0].auto === false);
+check('被合并组成员改挂到保留组', r8.tabs.every((t) => t.groupId === 'dg1'));
+
+// ---- 10. 手动化的 URI 组继续吸纳同 URI 新标签（不再新建同名组） ----
+const keyedManual = { id: 'km', name: 'login', color: '#333', collapsed: false, auto: false, urlKey: '/api/login' };
+const r9 = applyAutoGroups([
+  reqTab('a', 'http://x.com/api/login', 'km'),
+  reqTab('b', 'http://x.com/api/login', 'km'),
+  reqTab('n1', 'http://dev.local:8080/api/login'),
+  reqTab('n2', 'http://x.com/api/login')
+], [keyedManual], uuid);
+check('同 URI 新标签并入已有组而非新建同名组',
+  r9.groups.length === 1 &&
+  r9.tabs.find((t) => t.id === 'n1').groupId === 'km' &&
+  r9.tabs.find((t) => t.id === 'n2').groupId === 'km');
+
+// ---- 11. excludedTabIds：被移出的标签不拉回，其他同 URI 标签照常归组 ----
+const exGroup = {
+  id: 'eg', name: 'login', color: '#444', collapsed: false, auto: true,
+  urlKey: '/api/login', excludedTabIds: ['out']
+};
+const r10 = applyAutoGroups([
+  reqTab('a', 'http://x.com/api/login', 'eg'),
+  reqTab('b', 'http://x.com/api/login', 'eg'),
+  reqTab('out', 'http://x.com/api/login'),
+  reqTab('n3', 'http://x.com/api/login')
+], [exGroup], uuid);
+check('排除名单标签不被拉回',
+  !r10.tabs.find((t) => t.id === 'out').groupId &&
+  r10.tabs.find((t) => t.id === 'n3').groupId === 'eg' &&
+  r10.groups.length === 1);
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
