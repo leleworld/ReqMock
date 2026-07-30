@@ -4,7 +4,9 @@ import KeyValueEditor from './KeyValueEditor.jsx';
 import VarInput from './VarInput.jsx';
 import CodeEditor from './CodeEditor.jsx';
 import { syncParamsFromUrl, buildUrlFromParams, parseFormBody, buildFormBody } from '../utils/urlSync.js';
-import { AUTH_TYPES, newAuth } from '../utils/authUtil.js';
+import { AUTH_TYPES, newAuth, previewAuthHeader } from '../utils/authUtil.js';
+import { parseCurl } from '../utils/curlUtil.js';
+import { renderMarkdown } from '../utils/markdownUtil.js';
 import { COMMON_HEADERS } from '../utils/headerNames.js';
 import { tabIn } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
@@ -12,13 +14,13 @@ import { resolveVars } from '../utils/envUtil.js';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
-const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc'];
+const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
 
 /**
  * 请求顶栏（全宽）：方法 + URL + 发送，独立于下方分栏区，保证 URL 完整可见
  * （保存移入标题行，cURL/代码移入右侧工具条）
  */
-export function RequestBar({ request, sending, varNames = [], varMap = null, onChange, onSend, onCancel }) {
+export function RequestBar({ request, sending, varNames = [], varMap = null, activeEnv = null, onChange, onSend, onCancel, onToast }) {
   /** URL 编辑 → 自动解析 query 到 Params 表 */
   const setUrl = (url) => {
     onChange({ ...request, url, params: syncParamsFromUrl(url, request.params) });
@@ -30,8 +32,38 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, onC
     }
   };
 
+  /** 粘贴 cURL 命令自动识别导入（覆盖方法/URL/Headers/Body/授权） */
+  const handlePaste = (e) => {
+    const text = (e.clipboardData && e.clipboardData.getData('text')) || '';
+    if (!/^\s*(\$\s*)?curl(\.exe)?\s/i.test(text)) return;
+    e.preventDefault();
+    try {
+      const parsed = parseCurl(text);
+      onChange({
+        ...request,
+        method: parsed.method,
+        url: parsed.url,
+        params: syncParamsFromUrl(parsed.url, []),
+        headers: parsed.headers,
+        bodyType: parsed.bodyType,
+        body: parsed.body,
+        auth: parsed.auth ? { ...newAuth(), ...parsed.auth } : request.auth
+      });
+      if (onToast) onToast('已识别 cURL 命令并填充请求', 'success');
+    } catch (err) {
+      if (onToast) onToast('cURL 解析失败：' + err.message, 'error');
+    }
+  };
+
+  // 激活环境设了颜色时，请求栏左侧展示环境警示色条，避免发错环境
+  const envColor = activeEnv && activeEnv.color ? activeEnv.color : null;
+
   return (
-    <div className="request-bar">
+    <div
+      className={`request-bar${envColor ? ' env-tinted' : ''}`}
+      style={envColor ? { '--env-accent': envColor } : undefined}
+      title={envColor ? `当前环境：${activeEnv.name}` : undefined}
+    >
       <input
         className={`method-select method-input method-${request.method}`}
         list="method-list"
@@ -45,13 +77,14 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, onC
       </datalist>
       <VarInput
         className="url-input"
-        placeholder="http://localhost:8080/api/..."
+        placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
         value={request.url}
         varNames={varNames}
         varMap={varMap}
         highlight
         onChange={setUrl}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
       />
       {sending ? (
         <button className="btn-primary btn-cancel" title="取消发送中的请求" onClick={onCancel}>取消</button>
@@ -67,10 +100,11 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, onC
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock }) {
   // 当前活动页签
   const [tab, setTab] = useState('params');
   const [fmtError, setFmtError] = useState('');
+  const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // 外部编辑中的脚本 token → 字段名映射（pre/post）
   const [extEditing, setExtEditing] = useState({});
   const requestRef = useRef(request);
@@ -161,7 +195,27 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   const inheritedAuth = ownerCollection && ownerCollection.auth &&
     ownerCollection.auth.type !== 'none' && auth.type === 'none' ? ownerCollection.auth : null;
 
-  // 锁定行合并：集合继承的公共 Headers（⏬）+ 自动生成（🔒），内联置顶展示在请求头表格中
+  // 授权头预览：请求自身授权优先，其次继承集合授权；字段先做变量替换再生成（与发送时一致）
+  const effectiveAuth = auth.type !== 'none' ? auth : inheritedAuth;
+  const authPreview = previewAuthHeader(effectiveAuth ? {
+    ...effectiveAuth,
+    username: resolveVars(effectiveAuth.username || '', varMap),
+    password: resolveVars(effectiveAuth.password || '', varMap),
+    token: resolveVars(effectiveAuth.token || '', varMap),
+    value: resolveVars(effectiveAuth.value || '', varMap)
+  } : null);
+  const authRows = authPreview && !manualKeys.has(authPreview.key.toLowerCase())
+    ? [{
+        key: authPreview.key,
+        value: authPreview.value,
+        mark: effectiveAuth === inheritedAuth ? '⬇' : '🔒',
+        hint: effectiveAuth === inheritedAuth
+          ? `继承自集合「${ownerCollection.name}」的授权，发送时自动附加`
+          : '锁定：按「授权」页签配置自动生成，手动填写同名 Header 时以手动值为准'
+      }]
+    : [];
+
+  // 锁定行合并：集合继承的公共 Headers（⏬）+ 授权头 + 自动生成（🔒），内联置顶展示在请求头表格中
   const lockedHeaderRows = [
     ...inheritedHeaders.map((h) => ({
       key: h.key,
@@ -169,6 +223,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       mark: '⬇',
       hint: `继承自集合「${ownerCollection.name}」的公共 Headers，请求内同名 Header 优先`
     })),
+    ...authRows,
     ...autoHeaders
   ];
 
@@ -182,7 +237,8 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
           ['auth', `授权${auth.type !== 'none' ? ' ●' : ''}`],
           ['script', `脚本${(request.preScript || request.postScript) ? ' ●' : ''}`],
           ['settings', `设置${settingsCount > 0 ? ' ●' : ''}`],
-          ['doc', `文档${request.doc ? ' ●' : ''}`]
+          ['doc', `文档${request.doc ? ' ●' : ''}`],
+          ['examples', `示例${(request.examples || []).length > 0 ? ` (${request.examples.length})` : ''}`]
         ].map(([key, label]) => (
           <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
             {label}
@@ -468,16 +524,76 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
           </div>
         )}
         {tab === 'doc' && (
-          <textarea
-            className="body-textarea doc-textarea"
-            placeholder="请求说明文档（接口用途、参数含义、注意事项…）"
-            value={request.doc || ''}
-            onChange={(e) => set('doc', e.target.value)}
-            spellCheck={false}
+          <div className="doc-pane">
+            <div className="doc-toolbar">
+              <button className={`btn-text ${!docPreview ? 'doc-mode-on' : ''}`} onClick={() => setDocPreview(false)}>编辑</button>
+              <button className={`btn-text ${docPreview ? 'doc-mode-on' : ''}`} onClick={() => setDocPreview(true)}>预览</button>
+              <span className="env-hint">支持 Markdown：标题 / 列表 / 代码块 / 链接 / 粗斜体</span>
+            </div>
+            {docPreview ? (
+              request.doc
+                ? <div className="md-preview" dangerouslySetInnerHTML={{ __html: renderMarkdown(request.doc) }} />
+                : <div className="empty-hint">暂无文档内容，切到「编辑」撰写</div>
+            ) : (
+              <textarea
+                className="body-textarea doc-textarea"
+                placeholder="请求说明文档（接口用途、参数含义、注意事项…），支持 Markdown"
+                value={request.doc || ''}
+                onChange={(e) => set('doc', e.target.value)}
+                spellCheck={false}
+              />
+            )}
+          </div>
+        )}
+        {tab === 'examples' && (
+          <ExamplesPane
+            examples={request.examples || []}
+            onDelete={(id) => set('examples', (request.examples || []).filter((x) => x.id !== id))}
+            onToMock={onExampleToMock}
           />
         )}
         </motion.div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 示例响应页签：展示保存的示例响应列表，支持展开查看 / 转 Mock 路由 / 删除
+ */
+function ExamplesPane({ examples, onDelete, onToMock }) {
+  const [openId, setOpenId] = useState(null);
+
+  if (examples.length === 0) {
+    return (
+      <div className="empty-hint">
+        暂无示例响应。发送请求后在响应面板点「存为示例」，可把典型响应固化到请求上，随集合导出共享，并可一键生成 Mock 路由。
+      </div>
+    );
+  }
+
+  return (
+    <div className="examples-pane">
+      {examples.map((ex) => (
+        <div key={ex.id} className="example-item">
+          <div className="example-head" onClick={() => setOpenId(openId === ex.id ? null : ex.id)}>
+            <span className={`status-tag ${ex.status < 400 ? 'status-good' : 'status-bad'}`}>{ex.status}</span>
+            <span className="example-name">{ex.name}</span>
+            <span className="meta">{ex.contentType.split(';')[0]}</span>
+            <span className="flex-spacer" />
+            <span className="meta">{ex.savedAt ? new Date(ex.savedAt).toLocaleString() : ''}</span>
+            <button
+              className="btn-text"
+              title="用该示例的状态码/响应体生成 Mock 路由"
+              onClick={(e) => { e.stopPropagation(); onToMock && onToMock(ex); }}
+            >转 Mock</button>
+            <span className="item-delete" title="删除示例" onClick={(e) => { e.stopPropagation(); onDelete(ex.id); }}>×</span>
+          </div>
+          {openId === ex.id && (
+            <pre className="example-body">{ex.body || '（空响应体）'}</pre>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

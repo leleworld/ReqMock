@@ -153,13 +153,20 @@ async function sendHttpRequest(payload, signal) {
       if (hop === MAX_REDIRECTS) throw makeError('重定向次数超过上限 ' + MAX_REDIRECTS, 'TOO_MANY_REDIRECTS');
     }
 
-    const text = decodeBody(lastResult.rawBody, lastResult.headers['content-encoding']);
+    const decompressed = decompressBody(lastResult.rawBody, lastResult.headers['content-encoding']);
+    const text = decompressed.toString('utf8');
+    // 图片/PDF 等二进制响应额外附 base64（限 20MB），供渲染层预览与按原始字节保存
+    const respType = lastResult.headers['content-type'] || '';
+    const isBinary = /^(image|audio|video)\//i.test(respType) || /\b(pdf|octet-stream)\b/i.test(respType);
+    const bodyBase64 = isBinary && decompressed.length <= 20 * 1024 * 1024
+      ? decompressed.toString('base64') : undefined;
     return {
       ok: true,
       status: lastResult.status,
       statusText: lastResult.statusText,
       headers: lastResult.headers,
       body: text,
+      bodyBase64,
       timeMs: Date.now() - startTime,
       sizeBytes: lastResult.rawBody.length,
       finalUrl: curUrl.toString(),
@@ -475,14 +482,14 @@ function buildMultipart(formData) {
   return { buffer: Buffer.concat(parts), boundary };
 }
 
-/** 按 content-encoding 解压响应体 */
-function decodeBody(buffer, encoding) {
+/** 按 content-encoding 解压响应体，返回解压后的 Buffer */
+function decompressBody(buffer, encoding) {
   try {
-    if (encoding === 'gzip') return zlib.gunzipSync(buffer).toString('utf8');
-    if (encoding === 'deflate') return zlib.inflateSync(buffer).toString('utf8');
-    if (encoding === 'br') return zlib.brotliDecompressSync(buffer).toString('utf8');
+    if (encoding === 'gzip') return zlib.gunzipSync(buffer);
+    if (encoding === 'deflate') return zlib.inflateSync(buffer);
+    if (encoding === 'br') return zlib.brotliDecompressSync(buffer);
   } catch (e) { /* 解压失败按原文返回 */ }
-  return buffer.toString('utf8');
+  return buffer;
 }
 
 function hasHeader(headers, name) {

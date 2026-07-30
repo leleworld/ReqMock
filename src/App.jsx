@@ -25,7 +25,7 @@ import {
 import {
   newCollection, newFolder, normalizeNode, normalizeRequest,
   updateNode, removeNode, findNode, findOwnerCollection,
-  upsertRequestById, removeRequestById, findRequestPath,
+  upsertRequestById, removeRequestById, findRequestPath, findRequestById, moveRequest,
   exportCollection, exportWorkspace, exportEnvironment, exportEnvironments, parseImport
 } from './utils/collectionUtil.js';
 import { newEnvironment, buildVarMap, resolveRequest, mergeVariables } from './utils/envUtil.js';
@@ -96,6 +96,10 @@ const SHORTCUTS = [
   ['保存请求', 'Ctrl+S'],
   ['新建请求标签', 'Ctrl+T'],
   ['关闭标签', 'Ctrl+W'],
+  ['复制当前请求标签', 'Ctrl+D'],
+  ['循环切换标签', 'Ctrl+Tab / Ctrl+Shift+Tab'],
+  ['循环切换环境', 'Ctrl+E'],
+  ['快捷键速查', 'Ctrl+/'],
   ['新建窗口', 'Ctrl+Shift+N']
 ];
 
@@ -145,6 +149,14 @@ export default function App() {
   // 当前激活标签页及其派生状态（仅请求类标签持有 request）
   const curTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const activeRequest = curTab.kind === 'request' ? curTab.request : null;
+
+  /** 请求标签是否有未保存改动：与集合中已存版本对比；未入集合的非空白请求也视为未保存 */
+  const isTabDirty = useCallback((tab) => {
+    if (!tab || tab.kind !== 'request') return false;
+    const saved = findRequestById(collections, tab.request.id);
+    if (saved) return JSON.stringify(normalizeRequest(saved)) !== JSON.stringify(normalizeRequest(tab.request));
+    return !isBlankRequest(tab.request);
+  }, [collections]);
 
   const patchTab = useCallback((tabId, patch) => {
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, ...patch } : t)));
@@ -555,11 +567,25 @@ export default function App() {
     }
     if (!result.ok) pushNotice(`请求失败 ${finalReq.url}：${result.error || '未知错误'}`, 'error');
     if (errors.length) pushNotice(`脚本异常（${reqSnapshot.name || finalReq.url}）：${errors.join('；')}`, 'error');
+    // 历史条目：保留原请求 id（requestId）与耗时/体积，并附截断后的响应快照供回看
+    const snapBody = typeof result.body === 'string' ? result.body.slice(0, 20480) : '';
     setHistory((prev) => [{
       ...reqSnapshot,
       id: uuid(),
+      requestId: reqSnapshot.id,
       time: new Date().toISOString(),
-      status: result.ok ? result.status : 'ERR'
+      status: result.ok ? result.status : 'ERR',
+      timeMs: result.timeMs,
+      sizeBytes: result.ok ? result.sizeBytes : undefined,
+      responseSnapshot: result.ok ? {
+        status: result.status,
+        statusText: result.statusText,
+        headers: result.headers,
+        body: snapBody,
+        bodyTruncated: typeof result.body === 'string' && result.body.length > 20480,
+        timeMs: result.timeMs,
+        sizeBytes: result.sizeBytes
+      } : undefined
     }, ...prev].slice(0, 100));
   };
 
@@ -649,6 +675,50 @@ export default function App() {
     setActiveTabId(tab.id);
   };
 
+  /** 从历史打开请求；withSnapshot 时把当时的响应快照一并展示到响应面板 */
+  const handleOpenHistoryItem = (item, withSnapshot = false) => {
+    const { responseSnapshot, requestId, time, status, timeMs, sizeBytes, ...rest } = item;
+    const request = normalizeOpenedRequest(normalizeRequest({ ...rest, id: requestId || item.id }));
+    const snap = withSnapshot && responseSnapshot
+      ? { ok: true, ...responseSnapshot, fromHistory: true, historyTime: time }
+      : null;
+    const existing = tabs.find((t) => t.kind === 'request' && t.request.id === request.id);
+    if (existing) {
+      setActiveTabId(existing.id);
+      if (snap) patchTab(existing.id, { response: snap, scriptResult: null });
+      return;
+    }
+    if (curTab.kind === 'request' && isBlankRequest(curTab.request)) {
+      patchTab(curTab.id, { request, response: snap, scriptResult: null });
+      setActiveTabId(curTab.id);
+      return;
+    }
+    const tab = { ...createTab(request), response: snap };
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+  };
+
+  const handleDeleteHistoryItem = (id) => {
+    setHistory((prev) => prev.filter((h) => h.id !== id));
+  };
+
+  const handleClearHistory = () => {
+    setConfirm({
+      title: '清空历史', message: '确定清空全部请求历史？此操作不可撤销。', danger: true,
+      onConfirm: () => setHistory([])
+    });
+  };
+
+  /** 历史条目右键：复制为 cURL 命令 */
+  const handleCopyHistoryCurl = async (item) => {
+    try {
+      await navigator.clipboard.writeText(toCurl(normalizeRequest(item)));
+      showToast('cURL 命令已复制到剪贴板', 'success');
+    } catch (e) {
+      showToast('复制失败：' + e.message, 'error');
+    }
+  };
+
   // ---- 标签页操作 ----
   const handleNewTab = () => {
     const tab = createTab(newRequest());
@@ -678,8 +748,19 @@ export default function App() {
     });
   };
 
-  const handleCloseTab = (tabId) => {
-    closeRealtime(tabs.find((t) => t.id === tabId));
+  const handleCloseTab = (tabId, force = false) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    // 未保存改动二次确认，避免误关丢稿
+    if (!force && isTabDirty(tab)) {
+      setConfirm({
+        title: '关闭未保存的标签',
+        message: `「${tab.request.name || '未命名请求'}」有未保存的修改，关闭后将丢失，确定关闭？`,
+        danger: true,
+        onConfirm: () => handleCloseTab(tabId, true)
+      });
+      return;
+    }
+    closeRealtime(tab);
     const next = tabs.filter((t) => t.id !== tabId);
     if (next.length === 0) {
       // 关闭最后一个标签时自动新建空白标签
@@ -751,9 +832,19 @@ export default function App() {
     setTabs((prev) => prev.map((t) => (t.groupId === groupId ? { ...t, groupId: undefined } : t)));
   };
 
-  /** 关闭分组内全部标签 */
-  const handleCloseGroup = (groupId) => {
+  /** 关闭分组内全部标签（含未保存成员时先确认） */
+  const handleCloseGroup = (groupId, force = false) => {
     const group = tabGroups.find((g) => g.id === groupId);
+    const dirtyCount = tabs.filter((t) => t.groupId === groupId && isTabDirty(t)).length;
+    if (!force && dirtyCount > 0) {
+      setConfirm({
+        title: '关闭分组',
+        message: `分组内有 ${dirtyCount} 个标签存在未保存的修改，关闭后将丢失，确定全部关闭？`,
+        danger: true,
+        onConfirm: () => handleCloseGroup(groupId, true)
+      });
+      return;
+    }
     if (group && group.auto && group.urlKey) dismissedGroupKeysRef.current.add(group.urlKey);
     setTabGroups((prev) => prev.filter((g) => g.id !== groupId));
     tabs.filter((t) => t.groupId === groupId).forEach(closeRealtime);
@@ -768,13 +859,46 @@ export default function App() {
     if (!next.some((t) => t.id === curTab.id)) setActiveTabId(next[0].id);
   };
 
+  /** Ctrl+D：把当前请求复制到新标签（新 id，与原请求脱钩） */
+  const handleDuplicateTab = () => {
+    if (curTab.kind !== 'request') return;
+    const req = normalizeRequest({ ...curTab.request, id: uuid(), name: (curTab.request.name || '未命名请求') + ' 副本' });
+    const tab = createTab(req);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    showToast('已复制为新标签', 'success');
+  };
+
+  /** Ctrl+Tab / Ctrl+Shift+Tab：按标签栏顺序循环切换 */
+  const handleCycleTab = (dir) => {
+    if (tabs.length < 2) return;
+    const idx = tabs.findIndex((t) => t.id === curTab.id);
+    setActiveTabId(tabs[(idx + dir + tabs.length) % tabs.length].id);
+  };
+
+  /** Ctrl+E：在无环境与各环境间循环切换 */
+  const handleCycleEnv = () => {
+    if (environments.length === 0) {
+      showToast('暂无环境，请先在环境面板创建', 'warn');
+      return;
+    }
+    const ids = [null, ...environments.map((e) => e.id)];
+    const next = ids[(ids.indexOf(activeEnvId) + 1) % ids.length];
+    setActiveEnvId(next);
+    const env = environments.find((e) => e.id === next);
+    showToast(env ? `已切换环境：${env.name}` : '已切换为无环境');
+  };
+
   // ---- 快捷键（通过 ref 避免闭包过期） ----
   const hotkeysRef = useRef({});
   hotkeysRef.current = {
     send: handleSend,
     save: handleSaveRequest,
     newTab: handleNewTab,
-    closeTab: () => handleCloseTab(curTab.id)
+    closeTab: () => handleCloseTab(curTab.id),
+    dupTab: handleDuplicateTab,
+    cycleTab: handleCycleTab,
+    cycleEnv: handleCycleEnv
   };
   useEffect(() => {
     const onKey = (e) => {
@@ -786,6 +910,10 @@ export default function App() {
       else if (k === 's') { e.preventDefault(); h.save(); }
       else if (k === 't') { e.preventDefault(); h.newTab(); }
       else if (k === 'w') { e.preventDefault(); h.closeTab(); }
+      else if (k === 'd') { e.preventDefault(); h.dupTab(); }
+      else if (k === 'tab') { e.preventDefault(); h.cycleTab(e.shiftKey ? -1 : 1); }
+      else if (k === 'e') { e.preventDefault(); h.cycleEnv(); }
+      else if (k === '/') { e.preventDefault(); setKbdOpen((v) => !v); }
       else if (k === 'n' && e.shiftKey) { e.preventDefault(); window.api.newWindow(); }
     };
     window.addEventListener('keydown', onKey);
@@ -866,6 +994,11 @@ export default function App() {
   };
 
   const handleCollectionSettings = (colId) => setModal({ type: 'colSettings', colId });
+
+  /** 集合树拖拽：把请求移到目标集合/文件夹（可指定插入到某请求之前） */
+  const handleMoveRequest = (reqId, targetNodeId, beforeReqId = null) => {
+    setCollections((prev) => moveRequest(prev, reqId, targetNodeId, beforeReqId));
+  };
 
   // ---- Collection Runner ----
   /** 打开批量运行标签（同一节点复用标签） */
@@ -1147,6 +1280,112 @@ export default function App() {
     showToast('已生成 Mock 路由', 'success');
   };
 
+  /** JSON 树节点值提取为变量：写入激活环境，无激活环境时写入全局变量 */
+  const handleExtractVariable = (value, suggestedName = 'extracted') => {
+    setPrompt({
+      title: '提取为变量', label: '变量名', defaultValue: suggestedName,
+      onConfirm: (name) => {
+        if (!name) return;
+        const val = typeof value === 'string' ? value : JSON.stringify(value);
+        const upsertVar = (vars) => {
+          const idx = vars.findIndex((v) => v.key === name);
+          return idx >= 0
+            ? vars.map((v, i) => (i === idx ? { ...v, value: val, enabled: true } : v))
+            : [...vars, { key: name, value: val, enabled: true }];
+        };
+        if (activeEnvId) {
+          setEnvironments((prev) => prev.map((env) => (
+            env.id === activeEnvId ? { ...env, variables: upsertVar(env.variables) } : env
+          )));
+          showToast(`已写入环境变量 {{${name}}}`, 'success');
+        } else {
+          setGlobals((prev) => upsertVar(prev));
+          showToast(`未激活环境，已写入全局变量 {{${name}}}`, 'success');
+        }
+      }
+    });
+  };
+
+  /** 把当前响应体保存到文件（图片等二进制响应按原始字节写入） */
+  const handleSaveResponseBody = async () => {
+    const resp = curTab.response;
+    if (!resp || !resp.ok) return;
+    if (ioBusyRef.current) return;
+    ioBusyRef.current = true;
+    try {
+      const ct = (resp.headers && resp.headers['content-type']) || '';
+      const extMap = [
+        ['application/json', '.json'], ['text/html', '.html'], ['xml', '.xml'],
+        ['image/png', '.png'], ['image/jpeg', '.jpg'], ['image/gif', '.gif'],
+        ['image/webp', '.webp'], ['image/svg', '.svg'], ['pdf', '.pdf'], ['text/csv', '.csv']
+      ];
+      const ext = (extMap.find(([k]) => ct.includes(k)) || [null, '.txt'])[1];
+      let pathName = 'response';
+      try {
+        pathName = new URL(resp.finalUrl || (activeRequest && activeRequest.url)).pathname.split('/').filter(Boolean).pop() || 'response';
+      } catch (e) { /* 保持默认 */ }
+      const defaultName = pathName.includes('.') ? pathName : pathName + ext;
+      const res = resp.bodyBase64
+        ? await window.api.exportFile({ defaultName, content: resp.bodyBase64, encoding: 'base64' })
+        : await window.api.exportFile({ defaultName, content: resp.body || '' });
+      if (res.ok) showToast('已保存：' + res.filePath, 'success');
+      else if (!res.canceled) showToast('保存失败：' + res.error, 'error');
+    } finally {
+      ioBusyRef.current = false;
+    }
+  };
+
+  /** 把当前响应存为请求的示例响应（已在集合中则同步更新集合树） */
+  const handleSaveExample = () => {
+    const resp = curTab.response;
+    if (!activeRequest || !resp || !resp.ok) {
+      showToast('没有可保存的成功响应', 'warn');
+      return;
+    }
+    setPrompt({
+      title: '保存为示例响应', label: '示例名称', defaultValue: `${resp.status} 示例`,
+      onConfirm: (name) => {
+        if (!name) return;
+        const example = {
+          id: uuid(),
+          name,
+          status: resp.status,
+          contentType: (resp.headers && resp.headers['content-type']) || '',
+          headers: resp.headers || {},
+          body: typeof resp.body === 'string' ? resp.body.slice(0, 200 * 1024) : '',
+          savedAt: new Date().toISOString()
+        };
+        const req = { ...activeRequest, examples: [...(activeRequest.examples || []), example] };
+        setActiveRequest(req);
+        const { tree, found } = upsertRequestById(collections, req);
+        if (found) setCollections(tree);
+        showToast('已保存示例响应，可在「示例」页签查看', 'success');
+      }
+    });
+  };
+
+  /** 联动：从示例响应一键生成 Mock 路由 */
+  const handleExampleToMock = (example) => {
+    if (!activeRequest) return;
+    let pathName = '/';
+    try {
+      pathName = new URL(activeRequest.url).pathname;
+    } catch (e) { /* 保持默认 */ }
+    const route = {
+      ...newMockRoute(),
+      name: `${activeRequest.method} ${pathName}（${example.name}）`,
+      method: activeRequest.method,
+      path: pathName,
+      status: example.status,
+      headers: example.contentType ? [{ key: 'Content-Type', value: example.contentType, enabled: true }] : [],
+      body: example.body
+    };
+    setMock((prev) => ({ ...prev, routes: [...prev.routes, route] }));
+    setSelectedRouteId(route.id);
+    openPageTab('mock');
+    showToast('已从示例生成 Mock 路由', 'success');
+  };
+
   /** 联动：从 Mock 路由生成调试请求（新开标签） */
   const handleRouteToRequest = (route) => {
     const req = {
@@ -1162,6 +1401,51 @@ export default function App() {
 
   const settingsCollection = modal && modal.type === 'colSettings' ? findNode(collections, modal.colId) : null;
 
+  // ---- 全局拖拽导入：把集合/环境文件拖入窗口任意位置即可导入（环境面板拖拽区自行处理，避免重复） ----
+  const [dragImportOver, setDragImportOver] = useState(false);
+  const applyImportRef = useRef(null);
+  applyImportRef.current = applyImportContent;
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    const inDropZone = (e) => e.target instanceof Element && e.target.closest('.env-drop-zone');
+    const onDragEnter = (e) => {
+      if (!hasFiles(e)) return;
+      depth++;
+      if (!inDropZone(e)) setDragImportOver(true);
+    };
+    const onDragOver = (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setDragImportOver(!inDropZone(e));
+    };
+    const onDragLeave = () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragImportOver(false);
+    };
+    const onDrop = async (e) => {
+      depth = 0;
+      setDragImportOver(false);
+      if (!hasFiles(e) || inDropZone(e)) return;
+      e.preventDefault();
+      for (const file of Array.from(e.dataTransfer.files)) {
+        try {
+          applyImportRef.current(await file.text());
+        } catch (err) { /* 单个文件读取失败不阻断其余 */ }
+      }
+    };
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   // 面包屑：当前请求在集合树中的路径（未保存的请求不显示）
   const breadcrumb = activeRequest ? findRequestPath(collections, activeRequest.id) : null;
 
@@ -1172,6 +1456,7 @@ export default function App() {
       <TopBar
         environments={environments}
         activeEnvId={activeEnvId}
+        globals={globals}
         onActivateEnv={setActiveEnvId}
         onOpenGlobals={() => openPageTab('env', { envId: '__globals__' })}
         onManageEnvs={() => { setActivity('env'); setPanelOpen(true); }}
@@ -1200,6 +1485,11 @@ export default function App() {
         globals={globals}
         activeRequestId={activeRequest ? activeRequest.id : null}
         onOpenRequest={handleOpenRequest}
+        onOpenHistory={handleOpenHistoryItem}
+        onDeleteHistory={handleDeleteHistoryItem}
+        onClearHistory={handleClearHistory}
+        onCopyHistoryCurl={handleCopyHistoryCurl}
+        onMoveRequest={handleMoveRequest}
         onDeleteRequest={handleDeleteRequest}
         onNewRequest={handleNewTab}
         onNewCollection={handleNewCollection}
@@ -1233,6 +1523,7 @@ export default function App() {
           groups={tabGroups}
           activeTabId={curTab.id}
           tabMeta={tabMeta}
+          isTabDirty={isTabDirty}
           onSelect={setActiveTabId}
           onClose={handleCloseTab}
           onNew={handleNewTab}
@@ -1276,9 +1567,11 @@ export default function App() {
               sending={curTab.sending}
               varNames={varNames}
               varMap={buildVarMap(activeEnv, globals)}
+              activeEnv={activeEnv}
               onChange={setActiveRequest}
               onSend={handleSend}
               onCancel={handleCancelSend}
+              onToast={showToast}
             />
             <div
               className={`request-workspace layout-${settings.layout}`}
@@ -1291,6 +1584,7 @@ export default function App() {
                 varMap={buildVarMap(activeEnv, globals)}
                 ownerCollection={findOwnerCollection(collections, activeRequest.id)}
                 onChange={setActiveRequest}
+                onExampleToMock={handleExampleToMock}
               />
               {/* 分栏拖拽手柄：上下布局调高度、左右布局调宽度 */}
               <div
@@ -1303,6 +1597,9 @@ export default function App() {
                 sending={curTab.sending}
                 scriptResult={curTab.scriptResult}
                 onResponseToMock={handleResponseToMock}
+                onSaveExample={handleSaveExample}
+                onSaveBody={handleSaveResponseBody}
+                onExtractVariable={handleExtractVariable}
                 onToast={showToast}
                 layout={settings.layout}
                 onToggleLayout={() => handleChangeSettings({ layout: settings.layout === 'vertical' ? 'horizontal' : 'vertical' })}
@@ -1596,6 +1893,17 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 全局拖拽导入遮罩 */}
+      {dragImportOver && (
+        <div className="drag-import-overlay">
+          <div className="drag-import-box">
+            <div className="drag-import-icon">⤓</div>
+            <div>松开即导入集合 / 环境文件</div>
+            <div className="drag-import-sub">支持 ReqMock / Postman / OpenAPI / Insomnia / HAR / Hoppscotch</div>
+          </div>
+        </div>
+      )}
     </div>
     </MotionConfig>
   );

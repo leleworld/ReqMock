@@ -34,6 +34,24 @@ function hasEnabledHeader(headers, name) {
 }
 
 /**
+ * 授权配置对应的 Header 预览（请求头锁定行展示用）；
+ * 无授权 / query 型 ApiKey 时返回 null
+ */
+export function previewAuthHeader(auth) {
+  if (!auth || auth.type === 'none') return null;
+  if (auth.type === 'basic') {
+    return { key: 'Authorization', value: 'Basic ' + b64(`${auth.username || ''}:${auth.password || ''}`) };
+  }
+  if (auth.type === 'bearer') {
+    return { key: 'Authorization', value: 'Bearer ' + (auth.token || '') };
+  }
+  if (auth.type === 'apikey' && auth.key && auth.addTo !== 'query') {
+    return { key: auth.key, value: auth.value || '' };
+  }
+  return null;
+}
+
+/**
  * 应用授权配置：附加 Header / Query 参数并返回新请求对象。
  * 请求中已手动填写同名启用 Header 时不覆盖。
  */

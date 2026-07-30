@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { badgeSpring, tabIn } from '../utils/motionPresets.js';
 import CollectionTree from './CollectionTree.jsx';
@@ -31,6 +31,7 @@ export default function Sidebar(props) {
     onOpenEnv, onNewEnv, onExportEnvs,
     onSelectRoute, onAddRoute, onOpenMock,
     onOpenCookies, onOpenTool,
+    onOpenHistory, onDeleteHistory, onClearHistory, onCopyHistoryCurl,
     settings, onChangeSettings, onOpenSettings,
     noticeUnread, onToggleNotices
   } = props;
@@ -238,18 +239,13 @@ export default function Sidebar(props) {
             )}
 
             {activity === 'history' && (
-              <>
-                {history.length === 0 && <div className="empty-hint">暂无历史记录</div>}
-                {history.map((item) => (
-                  <div key={item.id} className="list-item" onClick={() => onOpenRequest(item)}>
-                    <span className={`method method-${item.method}`}>{item.method}</span>
-                    <span className="item-name" title={item.url}>{item.url || '(空)'}</span>
-                    <span className={`status-tag ${item.status === 'ERR' || item.status >= 400 ? 'status-bad' : 'status-good'}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                ))}
-              </>
+              <HistoryPane
+                history={history}
+                onOpen={onOpenHistory || onOpenRequest}
+                onDelete={onDeleteHistory}
+                onClear={onClearHistory}
+                onCopyCurl={onCopyHistoryCurl}
+              />
             )}
 
             {activity === 'tools' && (
@@ -282,6 +278,100 @@ export default function Sidebar(props) {
           title="拖拽调整面板宽度"
           onMouseDown={startResize}
         />
+      )}
+    </>
+  );
+}
+
+/** 历史面板：按域名分组折叠，条目带状态/耗时徽标，右键菜单支持打开/查看当时响应/复制 cURL/删除 */
+function HistoryPane({ history, onOpen, onDelete, onClear, onCopyCurl }) {
+  const [menu, setMenu] = useState(null); // { item, x, y }
+  const [collapsed, setCollapsed] = useState({}); // domain -> 是否折叠
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [menu]);
+
+  // 按域名分组（保持时间倒序，组顺序按首次出现）
+  const groups = [];
+  for (const item of history) {
+    let domain = '（未知地址）';
+    try { domain = new URL(item.url).host || domain; } catch (e) { /* URL 不完整 */ }
+    let g = groups.find((x) => x.domain === domain);
+    if (!g) { g = { domain, items: [] }; groups.push(g); }
+    g.items.push(item);
+  }
+
+  /** 去掉 origin 只显示路径，分组后更紧凑 */
+  const pathOf = (url) => {
+    try {
+      const u = new URL(url);
+      return (u.pathname || '/') + u.search;
+    } catch (e) { return url || '(空)'; }
+  };
+
+  const fmtTime = (t) => {
+    const d = new Date(t);
+    return isNaN(d) ? '' : d.toLocaleString();
+  };
+
+  return (
+    <>
+      {history.length === 0 && <div className="empty-hint">暂无历史记录，发送请求后自动记录</div>}
+      {history.length > 0 && (
+        <div className="sidebar-toolbar">
+          <button className="btn-block" title="清空全部历史记录" onClick={onClear}>清空历史（{history.length}）</button>
+        </div>
+      )}
+      {groups.map((g) => (
+        <div key={g.domain} className="history-group">
+          <div
+            className="history-group-head"
+            title={g.domain}
+            onClick={() => setCollapsed((prev) => ({ ...prev, [g.domain]: !prev[g.domain] }))}
+          >
+            <span className="tree-arrow">{collapsed[g.domain] ? '▸' : '▾'}</span>
+            <span className="item-name">{g.domain}</span>
+            <span className="tree-count">{g.items.length}</span>
+          </div>
+          {!collapsed[g.domain] && g.items.map((item) => (
+            <div
+              key={item.id}
+              className="list-item history-item"
+              title={`${item.url}\n${fmtTime(item.time)}${item.responseSnapshot ? '\n右键可查看当时响应' : ''}`}
+              onClick={() => onOpen(item)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ item, x: Math.min(e.clientX, window.innerWidth - 200), y: Math.min(e.clientY, window.innerHeight - 200) });
+              }}
+            >
+              <span className={`method method-${item.method}`}>{item.method}</span>
+              <span className="item-name">{pathOf(item.url)}</span>
+              {item.timeMs != null && <span className="history-ms">{item.timeMs}ms</span>}
+              <span className={`status-tag ${item.status === 'ERR' || item.status >= 400 ? 'status-bad' : 'status-good'}`}>
+                {item.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+      {menu && (
+        <div className="ctx-menu" style={{ position: 'fixed', left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          <div className="ctx-item" onClick={() => { onOpen(menu.item); setMenu(null); }}>打开请求</div>
+          {menu.item.responseSnapshot && (
+            <div className="ctx-item" onClick={() => { onOpen(menu.item, true); setMenu(null); }}>打开并查看当时响应</div>
+          )}
+          {onCopyCurl && (
+            <div className="ctx-item" onClick={() => { onCopyCurl(menu.item); setMenu(null); }}>复制为 cURL</div>
+          )}
+          <div className="ctx-sep" />
+          {onDelete && (
+            <div className="ctx-item ctx-danger" onClick={() => { onDelete(menu.item.id); setMenu(null); }}>删除该记录</div>
+          )}
+        </div>
       )}
     </>
   );

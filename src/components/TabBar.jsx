@@ -9,7 +9,7 @@ import { tabIn } from '../utils/motionPresets.js';
  * 支持 Chrome 式标签分组：同组标签包进组色容器（徽标 + 底色条），可折叠；右键菜单管理分组
  */
 export default function TabBar({
-  tabs, groups, activeTabId, tabMeta,
+  tabs, groups, activeTabId, tabMeta, isTabDirty,
   onSelect, onClose, onNew, onNewWs, onNewSse,
   onNewGroup, onAssignGroup, onLeaveGroup,
   onRenameGroup, onRecolorGroup, onToggleGroupCollapse, onUngroup, onCloseGroup
@@ -42,6 +42,7 @@ export default function TabBar({
     const isReq = !tab.kind || tab.kind === 'request';
     const meta = isReq ? null : tabMeta(tab);
     const active = tab.id === activeTabId;
+    const dirty = isReq && isTabDirty && isTabDirty(tab);
     return (
       <div
         key={tab.id}
@@ -57,6 +58,7 @@ export default function TabBar({
         )}
         <span className="tab-name">{isReq ? (tab.request.name || '未命名请求') : meta.label}</span>
         {isReq && tab.sending && <span className="tab-sending" title="发送中">●</span>}
+        {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)">●</span>}
         <span
           className="tab-close"
           title="关闭标签页 (Ctrl+W)"

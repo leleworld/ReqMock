@@ -122,7 +122,7 @@ function registerIpc() {
   ipcMain.handle('sse:close', async (event, id) => sseManager.close(id));
 
   // ---- 文件导入 / 导出 ----
-  ipcMain.handle('file:export', async (event, { defaultName, content }) => {
+  ipcMain.handle('file:export', async (event, { defaultName, content, encoding }) => {
     // 按扩展名生成保存过滤器（支持 json/md/html/txt 等任意扩展名，响应体下载复用此通道）
     const ext = (((defaultName || '').match(/\.([a-z0-9]+)$/i) || [])[1] || 'json').toLowerCase();
     const result = await dialog.showSaveDialog(mainWindow, {
@@ -135,7 +135,12 @@ function registerIpc() {
     });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
     try {
-      fs.writeFileSync(result.filePath, content, 'utf-8');
+      // encoding='base64' 时按二进制写入（图片等非文本响应体保存）
+      if (encoding === 'base64') {
+        fs.writeFileSync(result.filePath, Buffer.from(content || '', 'base64'));
+      } else {
+        fs.writeFileSync(result.filePath, content, 'utf-8');
+      }
       return { ok: true, filePath: result.filePath };
     } catch (e) {
       return { ok: false, error: e.message };

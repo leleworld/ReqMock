@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import { buildVarMap } from '../utils/envUtil.js';
 
+/** 环境警示色候选：切换器色点 + 请求栏色条，避免发错环境（典型：红=生产，绿=测试） */
+const ENV_COLORS = ['#e5534b', '#e8a03e', '#3fb28f', '#4f8cf7', '#a06bd8', '#d85f9c'];
+
 /**
- * 环境编辑面板（主区域）：环境名称 + 变量键值表；isGlobal 时为全局变量模式
+ * 环境编辑面板（主区域）：环境名称 + 警示色 + 变量键值表；isGlobal 时为全局变量模式
  * 生效预览：展示与全局变量/激活环境合并后最终生效的变量值及来源
  */
 export default function EnvironmentPanel({ environment, isActive, isGlobal, globals = [], activeEnv = null, onChange, onDelete, onActivate, onExport }) {
@@ -55,6 +58,18 @@ export default function EnvironmentPanel({ environment, isActive, isGlobal, glob
         {!isGlobal && (isActive
           ? <span className="env-active-badge">当前激活</span>
           : <button className="btn-secondary" onClick={() => onActivate(environment.id)}>设为激活</button>)}
+        {!isGlobal && (
+          <span className="env-color-picker" title="环境警示色：显示在顶栏切换器与请求栏，避免发错环境">
+            {ENV_COLORS.map((c) => (
+              <span
+                key={c}
+                className={`ctx-color ${environment.color === c ? 'on' : ''}`}
+                style={{ background: c }}
+                onClick={() => onChange({ ...environment, color: environment.color === c ? '' : c })}
+              />
+            ))}
+          </span>
+        )}
         <span className="flex-spacer" />
         <button
           className={`btn-secondary ${showPreview ? 'btn-toggled' : ''}`}

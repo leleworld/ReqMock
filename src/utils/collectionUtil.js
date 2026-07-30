@@ -42,7 +42,9 @@ export function normalizeRequest(req) {
     sslVerify: req.sslVerify !== false,
     omitEmptyEq: !!req.omitEmptyEq,
     cookieJarMode: req.cookieJarMode || 'default',
-    injectId: !!req.injectId
+    injectId: !!req.injectId,
+    // 示例响应：[{id, name, status, contentType, headers, body, savedAt}]
+    examples: req.examples || []
   };
 }
 
@@ -116,6 +118,54 @@ export function removeRequestById(collections, reqId) {
 export function countRequests(node) {
   return (node.requests || []).length +
     (node.folders || []).reduce((sum, f) => sum + countRequests(f), 0);
+}
+
+/** 在整棵树中按 id 查找请求（脏标记对比 / 拖拽移动用） */
+export function findRequestById(collections, reqId) {
+  const walk = (node) => {
+    const r = (node.requests || []).find((x) => x.id === reqId);
+    if (r) return r;
+    for (const f of node.folders || []) {
+      const found = walk(f);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const c of collections) {
+    const found = walk(c);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * 拖拽移动请求：从原位置摘除后插入目标集合/文件夹，可指定插入到某请求之前。
+ * 目标节点不存在或请求未找到时返回原树。
+ */
+export function moveRequest(collections, reqId, targetNodeId, beforeReqId = null) {
+  let moved = null;
+  const strip = (node) => {
+    let requests = node.requests || [];
+    const idx = requests.findIndex((r) => r.id === reqId);
+    if (idx >= 0) {
+      moved = requests[idx];
+      requests = requests.filter((r) => r.id !== reqId);
+    }
+    return { ...node, requests, folders: (node.folders || []).map(strip) };
+  };
+  const stripped = collections.map(strip);
+  if (!moved || !findNode(stripped, targetNodeId)) return collections;
+  const insert = (node) => {
+    if (node.id !== targetNodeId) {
+      return { ...node, folders: (node.folders || []).map(insert) };
+    }
+    const requests = [...(node.requests || [])];
+    const bi = beforeReqId ? requests.findIndex((r) => r.id === beforeReqId) : -1;
+    if (bi >= 0) requests.splice(bi, 0, moved);
+    else requests.push(moved);
+    return { ...node, requests };
+  };
+  return stripped.map(insert);
 }
 
 /**

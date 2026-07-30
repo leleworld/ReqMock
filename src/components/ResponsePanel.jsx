@@ -5,6 +5,7 @@ import { tokenizeJson, HIGHLIGHT_MAX_LENGTH } from '../utils/highlightUtil.js';
 import JsonFormatWorker from '../utils/jsonFormatWorker.js?worker';
 import { tryDecodeSelection } from '../utils/toolboxUtil.js';
 import { explainRequestError } from '../utils/errorExplain.js';
+import { diffLines, diffStats } from '../utils/diffUtil.js';
 import { toCurl } from '../utils/curlUtil.js';
 import CodeEditor from './CodeEditor.jsx';
 import { JbIcon } from './Icons.jsx';
@@ -21,7 +22,8 @@ const HEX_MAX_BYTES = 512 * 1024;
 export default function ResponsePanel({
   response, sending, scriptResult, onResponseToMock, onToast,
   layout, onToggleLayout, historyList = [], onSelectHistory,
-  onRetry, onRetryNoSsl, onOpenConsole
+  onRetry, onRetryNoSsl, onOpenConsole,
+  onSaveExample, onSaveBody, onExtractVariable
 }) {
   const [tab, setTab] = useState('body');
   const [view, setView] = useState('pretty');
@@ -245,8 +247,9 @@ export default function ResponsePanel({
   const trace = response.trace || [];
   const setCookies = response.setCookies || [];
 
-  /** 下载响应体：按 Content-Type 推断扩展名，复用导出通道 */
+  /** 下载响应体：优先走 App 层保存通道（支持二进制 bodyBase64），否则按文本导出 */
   const handleDownload = async () => {
+    if (onSaveBody) { onSaveBody(); return; }
     const ctEntry = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type');
     const ext = contentTypeToExt(ctEntry ? ctEntry[1] : '');
     const res = await window.api.exportFile({
@@ -302,6 +305,12 @@ export default function ResponsePanel({
       : prettyBody;
   };
 
+  // 预览能力判断：图片（需主进程附带 bodyBase64）/ HTML / PDF
+  const respCt = (Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type') || [])[1] || '';
+  const canPreview = (/^image\//i.test(respCt) && !!response.bodyBase64) || /html/i.test(respCt) || (/pdf/i.test(respCt) && !!response.bodyBase64);
+  // Diff 对比基准：本标签历史中除当前外的成功响应
+  const diffBases = historyList.filter((h) => h.response !== response && h.response.ok);
+
   return (
     <motion.div className="response-panel" {...pageIn}>
       <div className="response-status">
@@ -309,8 +318,10 @@ export default function ResponsePanel({
         <span className="meta">HTTP/{response.httpVersion || '1.1'}</span>
         <span className="meta">{response.timeMs} ms</span>
         <span className="meta">{formatSize(response.sizeBytes)}</span>
+        {response.fromHistory && <span className="meta" title="此为历史记录中保存的响应快照">📜 历史快照 {response.historyTime || ''}</span>}
         <span className="flex-spacer" />
         {historyBtn}
+        {onSaveExample && <button className="btn-secondary" title="把当前响应保存为请求示例（示例可一键转 Mock）" onClick={onSaveExample}>存为示例</button>}
         <button className="btn-secondary" onClick={onResponseToMock}>响应转 Mock</button>
         {layoutBtn}
       </div>
@@ -355,12 +366,16 @@ export default function ResponsePanel({
       {tab === 'body' && (
         <div className="body-toolbar">
           <div className="view-switch">
-            {[['pretty', 'Pretty'], ['raw', 'Raw'], ['tree', 'Tree'], ['hex', 'Hex']].map(([v, label]) => (
+            {[['pretty', 'Pretty'], ['raw', 'Raw'], ['tree', 'Tree'], ['hex', 'Hex'], ['preview', '预览'], ['diff', 'Diff']].map(([v, label]) => (
               <button
                 key={v}
                 className={view === v ? 'active' : ''}
-                disabled={v === 'tree' && !parsedJson.ok}
-                title={v === 'tree' && !parsedJson.ok ? '响应不是 JSON' : undefined}
+                disabled={(v === 'tree' && !parsedJson.ok) || (v === 'preview' && !canPreview) || (v === 'diff' && diffBases.length === 0)}
+                title={
+                  v === 'tree' && !parsedJson.ok ? '响应不是 JSON'
+                    : v === 'preview' && !canPreview ? '仅图片 / HTML / PDF 响应支持预览'
+                    : v === 'diff' && diffBases.length === 0 ? '再次发送后可与历史响应对比' : undefined
+                }
                 onClick={() => setView(v)}
               >{label}</button>
             ))}
@@ -428,10 +443,12 @@ export default function ResponsePanel({
         )}
         {tab === 'body' && view === 'tree' && (
           parsedJson.ok
-            ? <div className="json-tree"><JsonTree data={parsedJson.data} /></div>
+            ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onToast={onToast} /></div>
             : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>
         )}
         {tab === 'body' && view === 'hex' && <HexView text={response.body} />}
+        {tab === 'body' && view === 'preview' && <PreviewView response={response} contentType={respCt} />}
+        {tab === 'body' && view === 'diff' && <DiffView response={response} bases={diffBases} />}
         {tab === 'headers' && (
           <table className="headers-table">
             <tbody>
@@ -605,14 +622,56 @@ function buildSentUrl(finalReq) {
   }
 }
 
-/** JSON Tree 虚拟滚动视图：只渲染可视区域行，万级节点秒开 */
+/** JSON Tree 虚拟滚动视图：只渲染可视区域行，万级节点秒开；右键节点可复制值/路径/提取为变量 */
 const TREE_ROW_H = 22;
 const TREE_BUFFER = 8;
 
-function JsonTree({ data }) {
+/** 按 '$.a.b.0' 形式路径取子节点值（轻量实现，键名含 '.' 时不保证准确） */
+function getByPath(data, path) {
+  if (path === '$') return data;
+  let cur = data;
+  for (const p of path.slice(2).split('.')) {
+    if (cur == null) return undefined;
+    cur = cur[Array.isArray(cur) ? Number(p) : p];
+  }
+  return cur;
+}
+
+function JsonTree({ data, onExtractVariable, onToast }) {
   const scrollRef = useRef(null);
   const expandedRef = useRef(new Set());
   const [, setTick] = useState(0);
+  const [menu, setMenu] = useState(null); // { path, x, y }
+
+  // 右键菜单：点击外部 / Esc 关闭
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
+
+  const openMenu = (e, path) => {
+    e.preventDefault();
+    setMenu({ path, x: Math.min(e.clientX, window.innerWidth - 200), y: Math.min(e.clientY, window.innerHeight - 160) });
+  };
+
+  const copyText = async (text, tip) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      onToast && onToast(tip);
+    } catch (e) {
+      onToast && onToast('复制失败：' + e.message);
+    }
+  };
+
+  const menuValue = menu ? getByPath(data, menu.path) : undefined;
+  const menuIsLeaf = menu && (menuValue === null || typeof menuValue !== 'object');
 
   // 初始化：默认展开前两层
   useEffect(() => {
@@ -683,7 +742,7 @@ function JsonTree({ data }) {
           }
           if (!row.expandable) {
             return (
-              <div key={row.path} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }}>
+              <div key={row.path} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onContextMenu={(e) => openMenu(e, row.path)}>
                 <span className="jt-toggle-placeholder" />
                 {row.name !== undefined && (
                   <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
@@ -695,7 +754,7 @@ function JsonTree({ data }) {
             );
           }
           return (
-            <div key={row.path} className="jt-row jt-clickable" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onClick={() => toggle(row.path)}>
+            <div key={row.path} className="jt-row jt-clickable" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onClick={() => toggle(row.path)} onContextMenu={(e) => openMenu(e, row.path)}>
               <span className="jt-toggle">{row.expanded ? '▾' : '▸'}</span>
               {row.name !== undefined && (
                 <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
@@ -706,6 +765,91 @@ function JsonTree({ data }) {
           );
         })}
       </div>
+      {menu && (
+        <div className="ctx-menu" style={{ position: 'fixed', left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          <div
+            className="ctx-item"
+            onClick={() => {
+              const v = menuValue;
+              copyText(typeof v === 'string' ? v : JSON.stringify(v, null, 2), '已复制节点值');
+              setMenu(null);
+            }}
+          >复制值</div>
+          <div className="ctx-item" onClick={() => { copyText(menu.path, '已复制节点路径'); setMenu(null); }}>复制路径（{menu.path.length > 24 ? '…' + menu.path.slice(-22) : menu.path}）</div>
+          {menuIsLeaf && onExtractVariable && (
+            <div
+              className="ctx-item"
+              onClick={() => {
+                const seg = menu.path.split('.').filter((s) => s !== '$' && !/^\d+$/.test(s));
+                onExtractVariable(String(menuValue ?? ''), seg[seg.length - 1] || 'extracted');
+                setMenu(null);
+              }}
+            >提取为环境变量…</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 预览视图：图片（data URL）/ HTML（沙箱 iframe）/ PDF */
+function PreviewView({ response, contentType }) {
+  const ct = String(contentType || '').split(';')[0].trim();
+  if (/^image\//i.test(ct) && response.bodyBase64) {
+    return (
+      <div className="preview-view">
+        <img className="preview-img" src={`data:${ct};base64,${response.bodyBase64}`} alt="响应图片预览" />
+        <div className="env-hint">图片预览（{ct}，{formatSize(response.sizeBytes)}），可用上方下载按钮保存原文件</div>
+      </div>
+    );
+  }
+  if (/pdf/i.test(ct) && response.bodyBase64) {
+    return <iframe className="preview-frame" src={`data:application/pdf;base64,${response.bodyBase64}`} title="PDF 预览" />;
+  }
+  if (/html/i.test(ct)) {
+    // 沙箱 iframe：禁脚本禁同源，仅静态渲染
+    return <iframe className="preview-frame" sandbox="" srcDoc={response.body} title="HTML 预览" />;
+  }
+  return <div className="empty-hint" style={{ padding: 12 }}>该 Content-Type（{ct || '未知'}）暂不支持预览</div>;
+}
+
+/** JSON 优先美化后再逐行对比，非 JSON 按原文对比 */
+function tryPretty(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return String(text ?? ''); }
+}
+
+/** Diff 视图：当前响应与本标签历史响应逐行对比，可切换对比基准 */
+function DiffView({ response, bases }) {
+  const [baseId, setBaseId] = useState(bases.length ? bases[0].id : null);
+  const base = bases.find((h) => h.id === baseId) || bases[0] || null;
+
+  const diff = useMemo(() => {
+    if (!base) return null;
+    return diffLines(tryPretty(base.response.body), tryPretty(response.body));
+  }, [base, response]);
+  const stats = diff ? diffStats(diff) : { added: 0, removed: 0 };
+
+  if (!base) return <div className="empty-hint" style={{ padding: 12 }}>本标签暂无可对比的历史响应</div>;
+  return (
+    <div className="diff-view">
+      <div className="diff-toolbar">
+        <span className="meta">对比基准：</span>
+        <select className="diff-base-select" value={base.id} onChange={(e) => setBaseId(e.target.value)}>
+          {bases.map((h) => (
+            <option key={h.id} value={h.id}>{h.time}（{h.response.status} / {h.response.timeMs} ms）</option>
+          ))}
+        </select>
+        <span className="diff-stat diff-stat-add">+{stats.added}</span>
+        <span className="diff-stat diff-stat-del">−{stats.removed}</span>
+        {stats.added === 0 && stats.removed === 0 && <span className="meta">内容完全一致</span>}
+      </div>
+      <pre className="diff-body">
+        {diff.map((d, i) => (
+          <div key={i} className={`diff-line diff-${d.type}`}>
+            <span className="diff-sign">{d.type === 'add' ? '+' : d.type === 'del' ? '−' : ' '}</span>{d.text}
+          </div>
+        ))}
+      </pre>
     </div>
   );
 }

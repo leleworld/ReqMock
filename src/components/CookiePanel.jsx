@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { formatDate } from '../utils/toolboxUtil.js';
 
 /**
- * Cookie 管理面板：自动记录的 Cookie 列表 + 全局开关 + 手动添加/删除
+ * Cookie 管理面板：自动记录的 Cookie 按域名分组展示 + 全局开关 + 手动添加/删除/按域清空
  */
 export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggleEnabled }) {
   const [filter, setFilter] = useState('');
+  const [collapsed, setCollapsed] = useState({}); // domain -> 是否折叠
 
   const list = jar.filter((c) =>
     !filter ||
@@ -13,8 +14,21 @@ export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggle
     c.name.toLowerCase().includes(filter.toLowerCase())
   );
 
+  // 按域名分组（组顺序按首次出现）
+  const groups = [];
+  for (const c of list) {
+    let g = groups.find((x) => x.domain === c.domain);
+    if (!g) { g = { domain: c.domain, items: [] }; groups.push(g); }
+    g.items.push(c);
+  }
+
   const removeAt = (cookie) => {
     onChangeJar(jar.filter((c) => c !== cookie));
+  };
+
+  /** 清空指定域名下全部 Cookie */
+  const clearDomain = (domain) => {
+    onChangeJar(jar.filter((c) => c.domain !== domain));
   };
 
   const handleAdd = () => {
@@ -57,33 +71,50 @@ export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggle
               : '无匹配的 Cookie'}
           </div>
         )}
-        {list.length > 0 && (
-          <table className="headers-table cookie-table">
-            <thead>
-              <tr>
-                <th>域名</th><th>名称</th><th>值</th><th>路径</th><th>过期时间</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((c, i) => (
-                <tr key={i}>
-                  <td className="cookie-domain">{c.hostOnly ? '' : '.'}{c.domain}{c.secure ? ' 🔒' : ''}</td>
-                  <td className="header-key">
-                    <input className="cookie-cell-input" value={c.name} onChange={(e) => update(c, 'name', e.target.value)} />
-                  </td>
-                  <td className="header-value">
-                    <input className="cookie-cell-input" value={c.value} onChange={(e) => update(c, 'value', e.target.value)} />
-                  </td>
-                  <td>{c.path}</td>
-                  <td className="meta">{c.expires === null ? '会话' : formatDate(new Date(c.expires))}</td>
-                  <td>
-                    <span className="item-delete cookie-delete" onClick={() => removeAt(c)}>×</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {list.length > 0 && groups.map((g) => (
+          <div key={g.domain} className="cookie-group">
+            <div
+              className="history-group-head cookie-group-head"
+              onClick={() => setCollapsed((prev) => ({ ...prev, [g.domain]: !prev[g.domain] }))}
+            >
+              <span className="tree-arrow">{collapsed[g.domain] ? '▸' : '▾'}</span>
+              <span className="item-name">{g.domain}</span>
+              <span className="tree-count">{g.items.length}</span>
+              <span className="flex-spacer" />
+              <button
+                className="btn-text btn-danger"
+                title={`清空 ${g.domain} 下全部 Cookie`}
+                onClick={(e) => { e.stopPropagation(); clearDomain(g.domain); }}
+              >清空该域</button>
+            </div>
+            {!collapsed[g.domain] && (
+              <table className="headers-table cookie-table">
+                <thead>
+                  <tr>
+                    <th>名称</th><th>值</th><th>路径</th><th>过期时间</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.items.map((c, i) => (
+                    <tr key={i}>
+                      <td className="header-key">
+                        <input className="cookie-cell-input" value={c.name} onChange={(e) => update(c, 'name', e.target.value)} />
+                      </td>
+                      <td className="header-value">
+                        <input className="cookie-cell-input" value={c.value} onChange={(e) => update(c, 'value', e.target.value)} />
+                      </td>
+                      <td>{c.path}{c.secure ? ' 🔒' : ''}</td>
+                      <td className="meta">{c.expires === null ? '会话' : formatDate(new Date(c.expires))}</td>
+                      <td>
+                        <span className="item-delete cookie-delete" onClick={() => removeAt(c)}>×</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
