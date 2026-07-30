@@ -1193,7 +1193,7 @@ button:not(:disabled):active { transform: scale(0.96); }
 .search-count-err { color: var(--red); }
 .search-hit {
   background: color-mix(in srgb, var(--orange) 30%, transparent);
-  color: inherit; border-radius: 2px;
+  border-radius: 2px; /* 不覆盖 color：命中片段保留叠加的 tok-* 语法色 */
 }
 .search-hit-active {
   background: var(--orange); color: #1e1f22;

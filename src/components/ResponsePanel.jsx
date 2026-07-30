@@ -103,7 +103,7 @@ export default function ResponsePanel({
     try { setTreeData(JSON.parse(response.body)); } catch (_e) { /* 非 JSON */ }
   }, [view, response, treeData]);
 
-  // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号
+  // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号；同时记录命中区间供高亮合并渲染
   const searchInfo = useMemo(() => {
     if (!searchOpen || !query || !response || !response.ok) return null;
     const text = view === 'raw' ? response.body : prettyBody;
@@ -112,21 +112,23 @@ export default function ResponsePanel({
       const src = regexOn ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       re = new RegExp(src, caseSense ? 'g' : 'gi');
     } catch (e) {
-      return { error: true, segments: null, count: 0 };
+      return { error: true, segments: null, hits: null, count: 0 };
     }
     const segments = [];
+    const hits = [];
     let count = 0;
     let last = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
       if (m[0] === '') { re.lastIndex++; continue; }
       if (m.index > last) segments.push({ t: text.slice(last, m.index) });
+      hits.push({ start: m.index, end: m.index + m[0].length, idx: count });
       segments.push({ t: m[0], hit: count++ });
       last = m.index + m[0].length;
       if (count >= SEARCH_MAX_HITS) break;
     }
     if (last < text.length) segments.push({ t: text.slice(last) });
-    return { error: false, segments, count };
+    return { error: false, segments, hits, count };
   }, [searchOpen, query, caseSense, regexOn, view, prettyBody, response]);
 
   const hitCount = searchInfo && !searchInfo.error ? searchInfo.count : 0;
@@ -146,6 +148,26 @@ export default function ResponsePanel({
   useEffect(() => {
     if (searchOpen && searchInputRef.current) searchInputRef.current.focus();
   }, [searchOpen]);
+
+  // Ctrl/Cmd+F：打开响应体搜索栏并聚焦（输入框/可编辑编辑器内保留其自身的查找行为）
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (e.key.toLowerCase() !== 'f') return;
+      if (!response || !response.ok) return;
+      if (e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]')) return;
+      e.preventDefault();
+      setTab('body');
+      if (searchOpen && searchInputRef.current) {
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
+      } else {
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [response, searchOpen]);
 
   // 历史下拉展开后：点击弹层外部或按 Esc 自动关闭
   useEffect(() => {
@@ -287,10 +309,44 @@ export default function ResponsePanel({
     }
   };
 
-  /** 带搜索命中标记的正文渲染（搜索激活时跳过语法高亮保证 mark 位置精确） */
+  /** 带搜索命中标记的正文渲染（Pretty 视图下命中区间与语法 token 合并，保留 JSON 高亮） */
   const searchActive = !!(searchInfo && !searchInfo.error && query);
+  const renderTokenPiece = (tk, text, key) =>
+    tk.type === 'plain' ? text : <span key={key} className={`tok-${tk.type}`}>{text}</span>;
+  /** token 流按命中区间切片：命中片段包 mark 且叠加原 tok-* 颜色类 */
+  const renderTokensWithHits = () => {
+    const hits = searchInfo.hits;
+    const out = [];
+    let pos = 0;
+    let hi = 0;
+    let key = 0;
+    for (const tk of tokens) {
+      const end = pos + tk.text.length;
+      let cur = pos;
+      while (hi < hits.length && hits[hi].start < end) {
+        const h = hits[hi];
+        const s = Math.max(h.start, cur);
+        const t = Math.min(h.end, end);
+        if (s > cur) out.push(renderTokenPiece(tk, tk.text.slice(cur - pos, s - pos), key++));
+        out.push(
+          <mark
+            key={key++}
+            className={(h.idx === curHit ? 'search-hit search-hit-active' : 'search-hit') + (tk.type !== 'plain' ? ` tok-${tk.type}` : '')}
+          >{tk.text.slice(s - pos, t - pos)}</mark>
+        );
+        cur = t;
+        if (h.end <= end) hi++;
+        else break;
+      }
+      if (cur < end) out.push(renderTokenPiece(tk, tk.text.slice(cur - pos), key++));
+      pos = end;
+    }
+    return out;
+  };
   const renderBodyText = () => {
     if (searchActive) {
+      // Pretty 视图且有语法 token：合并渲染，既保留高亮又精确标记命中
+      if (view === 'pretty' && tokens) return renderTokensWithHits();
       return searchInfo.segments.map((seg, i) =>
         seg.hit != null
           ? <mark key={i} className={seg.hit === curHit ? 'search-hit search-hit-active' : 'search-hit'}>{seg.t}</mark>
