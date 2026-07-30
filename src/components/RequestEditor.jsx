@@ -6,7 +6,7 @@ import CodeEditor from './CodeEditor.jsx';
 import { syncParamsFromUrl, buildUrlFromParams, parseFormBody, buildFormBody } from '../utils/urlSync.js';
 import { AUTH_TYPES, newAuth } from '../utils/authUtil.js';
 import { COMMON_HEADERS } from '../utils/headerNames.js';
-import { tabSlide } from '../utils/motionPresets.js';
+import { tabIn } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
 import { resolveVars } from '../utils/envUtil.js';
 
@@ -68,13 +68,8 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, onC
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
 export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange }) {
-  // 页签 + 切换方向（往右切从右滑入，往左切从左滑入）
-  const [tabNav, setTabNav] = useState({ tab: 'params', dir: 1 });
-  const tab = tabNav.tab;
-  const setTab = (next) => setTabNav((prev) => ({
-    tab: next,
-    dir: TAB_ORDER.indexOf(next) >= TAB_ORDER.indexOf(prev.tab) ? 1 : -1
-  }));
+  // 当前活动页签
+  const [tab, setTab] = useState('params');
   const [fmtError, setFmtError] = useState('');
   // 外部编辑中的脚本 token → 字段名映射（pre/post）
   const [extEditing, setExtEditing] = useState({});
@@ -180,31 +175,24 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   return (
     <div className="request-editor">
       <div className="editor-tabs">
-        <button className={tab === 'params' ? 'active' : ''} onClick={() => setTab('params')}>
-          Params{request.params.filter(p => p.key).length > 0 && ` (${request.params.filter(p => p.key).length})`}
-        </button>
-        <button className={tab === 'body' ? 'active' : ''} onClick={() => setTab('body')}>
-          Body{request.bodyType !== 'none' && ' ●'}
-        </button>
-        <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
-          Headers{request.headers.filter(h => h.key).length > 0 && ` (${request.headers.filter(h => h.key).length})`}
-        </button>
-        <button className={tab === 'auth' ? 'active' : ''} onClick={() => setTab('auth')}>
-          授权{auth.type !== 'none' && ' ●'}
-        </button>
-        <button className={tab === 'script' ? 'active' : ''} onClick={() => setTab('script')}>
-          脚本{(request.preScript || request.postScript) && ' ●'}
-        </button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
-          设置{settingsCount > 0 && ' ●'}
-        </button>
-        <button className={tab === 'doc' ? 'active' : ''} onClick={() => setTab('doc')}>
-          文档{request.doc && ' ●'}
-        </button>
+        {[
+          ['params', `Params${request.params.filter(p => p.key).length > 0 ? ` (${request.params.filter(p => p.key).length})` : ''}`],
+          ['body', `Body${request.bodyType !== 'none' ? ' ●' : ''}`],
+          ['headers', `Headers${request.headers.filter(h => h.key).length > 0 ? ` (${request.headers.filter(h => h.key).length})` : ''}`],
+          ['auth', `授权${auth.type !== 'none' ? ' ●' : ''}`],
+          ['script', `脚本${(request.preScript || request.postScript) ? ' ●' : ''}`],
+          ['settings', `设置${settingsCount > 0 ? ' ●' : ''}`],
+          ['doc', `文档${request.doc ? ' ●' : ''}`]
+        ].map(([key, label]) => (
+          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
+            {label}
+            {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          </button>
+        ))}
       </div>
 
       <div className="editor-content">
-        <motion.div className="editor-pane" key={tab} custom={tabNav.dir} {...tabSlide}>
+        <motion.div className="editor-pane" key={tab} {...tabIn}>
         {tab === 'params' && (
           <KeyValueEditor
             rows={request.params}

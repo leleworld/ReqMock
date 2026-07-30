@@ -333,10 +333,15 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .editor-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); }
 .editor-tabs button {
+  position: relative;
   padding: 8px 14px; background: none; color: var(--text-dim);
   border-bottom: 2px solid transparent; border-radius: 0;
 }
-.editor-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.editor-tabs button.active { color: var(--text); border-bottom-color: transparent; }
+.tab-indicator {
+  position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 2px; background: var(--accent); border-radius: 1px;
+}
 
 .editor-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; }
 /* 页签内容动画容器：高度撑满保证脚本/文档等 100% 高度布局不变 */
@@ -1195,9 +1200,13 @@ button:not(:disabled):active { transform: scale(0.96); }
   box-shadow: 0 0 6px color-mix(in srgb, var(--orange) 50%, transparent);
 }
 
-/* ==== JSON Tree 折叠视图 ==== */
+/* ==== JSON Tree 折叠视图（虚拟滚动） ==== */
 .json-tree {
-  padding: 12px; font-family: Consolas, monospace; font-size: 12px; line-height: 1.65;
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  font-family: Consolas, monospace; font-size: 12px; line-height: 1.65;
+}
+.jt-vscroll {
+  flex: 1; min-height: 0; overflow: auto;
 }
 .jt-row { display: flex; align-items: baseline; white-space: pre-wrap; word-break: break-all; }
 .jt-clickable { cursor: pointer; border-radius: var(--radius-s); }

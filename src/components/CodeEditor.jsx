@@ -13,42 +13,45 @@ import { tags } from '@lezer/highlight';
  * 自定义 JSON 折叠服务（Reqable 风格）：
  * 1. 确保所有层级（含根对象/顶层属性）都能折叠
  * 2. 折叠后闭合括号保留在独立行并显示原始行号
+ * 3. 性能优化：基于行扫描（非字符扫描），大文件时限制最大扫描行数
  */
+const FOLD_MAX_LINES = 50000; // 超过此行数不进行折叠计算
 const jsonBracketFold = foldService.of((state, lineStart, lineEnd) => {
+  if (state.doc.lines > FOLD_MAX_LINES) return null;
   const line = state.doc.lineAt(lineStart);
   const text = line.text;
   const trimmed = text.trimEnd();
-  // 行尾为 { 或 [ 时尝试找到匹配的闭括号
   const lastChar = trimmed[trimmed.length - 1];
   if (lastChar !== '{' && lastChar !== '[') return null;
-  const openChar = lastChar;
-  const closeChar = openChar === '{' ? '}' : ']';
-  // 从该括号之后开始向下扫描匹配
+  const closeChar = lastChar === '{' ? '}' : ']';
+  // 基于行扫描匹配括号（快速：仅统计每行的开闭括号数，跳过字符串内容）
   let depth = 1;
-  let pos = line.to + 1; // 跳过换行符
-  const docLen = state.doc.length;
-  let inStr = false;
-  while (pos < docLen && depth > 0) {
-    const ch = state.doc.sliceString(pos, pos + 1);
-    if (inStr) {
-      if (ch === '\\') { pos += 2; continue; }
-      if (ch === '"') inStr = false;
-    } else {
-      if (ch === '"') inStr = true;
-      else if (ch === openChar) depth++;
-      else if (ch === closeChar) {
-        depth--;
-        if (depth === 0) {
-          // Reqable 风格：折叠范围到闭括号行前的换行符之前，
-          // 使闭括号保留在独立行并显示其原始行号
-          const closeLine = state.doc.lineAt(pos);
-          const foldEnd = closeLine.from - 1; // 换行符位置
-          if (foldEnd <= line.to) return null; // 相邻行无需折叠
-          return { from: line.to, to: foldEnd };
+  const totalLines = state.doc.lines;
+  let lineNo = line.number + 1;
+  while (lineNo <= totalLines && depth > 0) {
+    const ln = state.doc.line(lineNo);
+    const t = ln.text;
+    let inStr = false;
+    for (let i = 0, len = t.length; i < len; i++) {
+      const ch = t[i];
+      if (inStr) {
+        if (ch === '\\') { i++; continue; }
+        if (ch === '"') inStr = false;
+      } else {
+        if (ch === '"') inStr = true;
+        else if (ch === lastChar) depth++;
+        else if (ch === closeChar) {
+          depth--;
+          if (depth === 0) {
+            // 闭括号保留在独立行，折叠范围到其前一行末尾
+            const foldEnd = ln.from - 1;
+            if (foldEnd <= line.to) return null;
+            return { from: line.to, to: foldEnd };
+          }
         }
       }
     }
-    pos++;
+    lineNo++;
   }
   return null;
 });

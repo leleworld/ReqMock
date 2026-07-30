@@ -1,17 +1,18 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { motion, LayoutGroup } from 'framer-motion';
 import { pageIn, tabIn } from '../utils/motionPresets.js';
 import { tokenizeJson, HIGHLIGHT_MAX_LENGTH } from '../utils/highlightUtil.js';
+import JsonFormatWorker from '../utils/jsonFormatWorker.js?worker';
 import { tryDecodeSelection } from '../utils/toolboxUtil.js';
 import { explainRequestError } from '../utils/errorExplain.js';
 import { toCurl } from '../utils/curlUtil.js';
 import CodeEditor from './CodeEditor.jsx';
 import { JbIcon } from './Icons.jsx';
 
-/** Hex 视图最大字节数，超出截断避免卡顿 */
-const HEX_MAX_BYTES = 64 * 1024;
 /** 体内搜索最大命中数 */
 const SEARCH_MAX_HITS = 5000;
+/** Hex 视图最大显示字节数 */
+const HEX_MAX_BYTES = 512 * 1024;
 
 /**
  * 响应面板：状态行 + Body(Pretty/Raw/Tree/Hex + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
@@ -35,29 +36,70 @@ export default function ResponsePanel({
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // JSON 响应美化 + 语法高亮（超长内容降级为纯文本）
-  const { prettyBody, tokens } = useMemo(() => {
-    if (!response || !response.ok) return { prettyBody: '', tokens: null };
-    try {
-      const pretty = JSON.stringify(JSON.parse(response.body), null, 2);
-      if (pretty.length <= HIGHLIGHT_MAX_LENGTH) {
-        return { prettyBody: pretty, tokens: tokenizeJson(pretty) };
+  // ── Web Worker 格式化：JSON parse + stringify 完全在独立线程执行，主线程零阻塞 ──
+  const [fmtResult, setFmtResult] = useState(null); // { pretty, isJson }
+  const workerRef = useRef(null);
+  const fmtIdRef = useRef(0);
+
+  // 创建 / 销毁 Worker（组件级单例）
+  useEffect(() => {
+    const w = new JsonFormatWorker();
+    w.onmessage = (e) => {
+      const { id, ok, pretty } = e.data;
+      if (id === fmtIdRef.current) {
+        setFmtResult(ok ? { pretty, isJson: true } : { pretty: '', isJson: false });
       }
-      return { prettyBody: pretty, tokens: null };
-    } catch (e) {
-      return { prettyBody: response.body, tokens: null };
+    };
+    workerRef.current = w;
+    return () => { w.terminate(); workerRef.current = null; };
+  }, []);
+
+  // 响应变化时触发格式化（小响应同步，大响应走 Worker）
+  useEffect(() => {
+    if (!response || !response.ok) { setFmtResult(null); setTreeData(null); return; }
+    setTreeData(null); // 重置 Tree 缓存
+    const body = response.body;
+    const id = ++fmtIdRef.current;
+    // ≤100KB 同步处理（<1ms），避免 Worker postMessage 开销
+    if (body.length <= 100000) {
+      try {
+        const pretty = JSON.stringify(JSON.parse(body), null, 2);
+        setFmtResult({ pretty, isJson: true });
+      } catch (_e) {
+        setFmtResult({ pretty: '', isJson: false });
+      }
+      return;
     }
+    // 大响应：先展示原始 body，Worker 后台格式化完成后自动替换
+    setFmtResult(null);
+    workerRef.current.postMessage({ id, body });
   }, [response]);
 
-  // Tree 视图解析结果（非 JSON 时不可用）
+  // Pretty 视图文本 + 高亮 token（小响应同步 tokenize，大响应跳过 token 走 CodeMirror 内置高亮）
+  const { prettyBody, tokens } = useMemo(() => {
+    if (!response || !response.ok) return { prettyBody: '', tokens: null };
+    const body = fmtResult ? fmtResult.pretty : response.body;
+    if (body.length <= HIGHLIGHT_MAX_LENGTH && fmtResult && fmtResult.isJson) {
+      return { prettyBody: body, tokens: tokenizeJson(body) };
+    }
+    return { prettyBody: body, tokens: null };
+  }, [response, fmtResult]);
+
+  // Tree 视图解析：按需懒解析（仅在用户切到 Tree 视图时执行，不再重复 parse）
+  const [treeData, setTreeData] = useState(null);
   const parsedJson = useMemo(() => {
     if (!response || !response.ok) return { ok: false };
-    try {
-      return { ok: true, data: JSON.parse(response.body) };
-    } catch (e) {
-      return { ok: false };
-    }
-  }, [response]);
+    if (treeData !== null) return { ok: true, data: treeData };
+    if (fmtResult && !fmtResult.isJson) return { ok: false };
+    if (fmtResult && fmtResult.isJson) return { ok: true }; // Worker 已验证合法 JSON
+    try { JSON.parse(response.body); return { ok: true }; } catch { return { ok: false }; }
+  }, [response, fmtResult, treeData]);
+
+  // Tree 视图懒解析：切到 Tree 时才解析完整 JSON 并缓存
+  useEffect(() => {
+    if (view !== 'tree' || !response || !response.ok || treeData !== null) return;
+    try { setTreeData(JSON.parse(response.body)); } catch (_e) { /* 非 JSON */ }
+  }, [view, response, treeData]);
 
   // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号
   const searchInfo = useMemo(() => {
@@ -273,30 +315,42 @@ export default function ResponsePanel({
         {layoutBtn}
       </div>
 
+      <LayoutGroup id="resp-tabs">
       <div className="editor-tabs">
-        <button className={tab === 'body' ? 'active' : ''} onClick={() => setTab('body')}>Body</button>
+        <button className={tab === 'body' ? 'active' : ''} onClick={() => setTab('body')}>
+          Body
+          {tab === 'body' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+        </button>
         <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
           Headers ({Object.keys(response.headers).length})
+          {tab === 'headers' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
         </button>
         {setCookies.length > 0 && (
           <button className={tab === 'cookies' ? 'active' : ''} onClick={() => setTab('cookies')}>
             Cookies ({setCookies.length})
+            {tab === 'cookies' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}
         {response.timings && (
-          <button className={tab === 'timings' ? 'active' : ''} onClick={() => setTab('timings')}>耗时</button>
+          <button className={tab === 'timings' ? 'active' : ''} onClick={() => setTab('timings')}>
+            耗时
+            {tab === 'timings' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          </button>
         )}
         {trace.length > 1 && (
           <button className={tab === 'trace' ? 'active' : ''} onClick={() => setTab('trace')}>
             重定向 ({trace.length - 1})
+            {tab === 'trace' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}
         {hasScriptInfo && (
           <button className={tab === 'tests' ? 'active' : ''} onClick={() => setTab('tests')}>
             测试 {testCount > 0 && (testFailed > 0 ? `(${testCount - testFailed}/${testCount}✗)` : `(${testCount}✓)`)}
+            {tab === 'tests' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}
       </div>
+      </LayoutGroup>
 
       {tab === 'body' && (
         <div className="body-toolbar">
@@ -374,7 +428,7 @@ export default function ResponsePanel({
         )}
         {tab === 'body' && view === 'tree' && (
           parsedJson.ok
-            ? <div className="json-tree"><JsonTree data={parsedJson.data} depth={0} /></div>
+            ? <div className="json-tree"><JsonTree data={parsedJson.data} /></div>
             : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>
         )}
         {tab === 'body' && view === 'hex' && <HexView text={response.body} />}
@@ -551,48 +605,107 @@ function buildSentUrl(finalReq) {
   }
 }
 
-/** JSON Tree 折叠视图：对象/数组可展开收起，前两层默认展开 */
-function JsonTree({ data, depth, name }) {
-  const isObj = data !== null && typeof data === 'object';
-  const [open, setOpen] = useState(depth < 2);
+/** JSON Tree 虚拟滚动视图：只渲染可视区域行，万级节点秒开 */
+const TREE_ROW_H = 22;
+const TREE_BUFFER = 8;
 
-  const label = name !== undefined && (
-    <span className="jt-key">{typeof name === 'number' ? name : `"${name}"`}<span className="jt-colon">: </span></span>
-  );
+function JsonTree({ data }) {
+  const scrollRef = useRef(null);
+  const expandedRef = useRef(new Set());
+  const [, setTick] = useState(0);
 
-  if (!isObj) {
-    return (
-      <div className="jt-row" style={{ paddingLeft: depth * 16 }}>
-        <span className="jt-toggle-placeholder" />
-        {label}
-        <span className={`jt-val jt-${data === null ? 'null' : typeof data}`}>
-          {typeof data === 'string' ? `"${data}"` : String(data)}
-        </span>
-      </div>
-    );
-  }
+  // 初始化：默认展开前两层
+  useEffect(() => {
+    const expanded = new Set();
+    (function init(d, path, depth) {
+      if (d === null || typeof d !== 'object' || depth > 1) return;
+      expanded.add(path);
+      const entries = Array.isArray(d) ? d.map((v, i) => [i, v]) : Object.entries(d);
+      for (const [k, v] of entries) init(v, path + '.' + k, depth + 1);
+    })(data, '$', 0);
+    expandedRef.current = expanded;
+    setTick(1);
+  }, [data]);
 
-  const isArr = Array.isArray(data);
-  const entries = isArr ? data.map((v, i) => [i, v]) : Object.entries(data);
-  const brackets = isArr ? ['[', ']'] : ['{', '}'];
+  const toggle = useCallback((path) => {
+    const s = expandedRef.current;
+    if (s.has(path)) s.delete(path); else s.add(path);
+    setTick((t) => t + 1);
+  }, []);
+
+  // 扁平化：只遍历已展开节点，生成可视行列表
+  const rows = useMemo(() => {
+    const result = [];
+    const expanded = expandedRef.current;
+    (function walk(d, path, depth, name) {
+      if (d === null || typeof d !== 'object') {
+        result.push({ depth, name, value: d, expandable: false, path });
+        return;
+      }
+      const isArr = Array.isArray(d);
+      const entries = isArr ? d.map((v, i) => [i, v]) : Object.entries(d);
+      const br = isArr ? ['[', ']'] : ['{', '}'];
+      const isExp = expanded.has(path);
+      result.push({ depth, name, expandable: true, expanded: isExp, count: entries.length, bracket: br[0], path });
+      if (isExp) {
+        for (const [k, v] of entries) walk(v, path + '.' + k, depth + 1, k);
+        result.push({ depth, closing: true, bracket: br[1], path });
+      }
+    })(data, '$', 0, undefined);
+    return result;
+  }, [data, expandedRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 虚拟滚动：只渲染可视区域 + 上下缓冲行
+  const onScroll = useCallback(() => {
+    setTick((t) => t + 1);
+  }, []);
+
+  const scrollTop = scrollRef.current ? scrollRef.current.scrollTop : 0;
+  const clientH = scrollRef.current ? scrollRef.current.clientHeight : 600;
+  const totalH = rows.length * TREE_ROW_H;
+  const startIdx = Math.max(0, Math.floor(scrollTop / TREE_ROW_H) - TREE_BUFFER);
+  const endIdx = Math.min(rows.length, Math.ceil((scrollTop + clientH) / TREE_ROW_H) + TREE_BUFFER);
+  const visible = rows.slice(startIdx, endIdx);
 
   return (
-    <div>
-      <div className="jt-row jt-clickable" style={{ paddingLeft: depth * 16 }} onClick={() => setOpen(!open)}>
-        <span className="jt-toggle">{open ? '▾' : '▸'}</span>
-        {label}
-        <span className="jt-bracket">{brackets[0]}</span>
-        {!open && <span className="jt-ellipsis">… {entries.length} 项 {brackets[1]}</span>}
+    <div className="jt-vscroll" ref={scrollRef} onScroll={onScroll}>
+      <div style={{ height: totalH, position: 'relative' }}>
+        {visible.map((row, i) => {
+          const idx = startIdx + i;
+          const top = idx * TREE_ROW_H;
+          if (row.closing) {
+            return (
+              <div key={row.path + '/c'} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }}>
+                <span className="jt-toggle-placeholder" />
+                <span className="jt-bracket">{row.bracket}</span>
+              </div>
+            );
+          }
+          if (!row.expandable) {
+            return (
+              <div key={row.path} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }}>
+                <span className="jt-toggle-placeholder" />
+                {row.name !== undefined && (
+                  <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
+                )}
+                <span className={`jt-val jt-${row.value === null ? 'null' : typeof row.value}`}>
+                  {typeof row.value === 'string' ? `"${row.value}"` : String(row.value)}
+                </span>
+              </div>
+            );
+          }
+          return (
+            <div key={row.path} className="jt-row jt-clickable" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onClick={() => toggle(row.path)}>
+              <span className="jt-toggle">{row.expanded ? '▾' : '▸'}</span>
+              {row.name !== undefined && (
+                <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
+              )}
+              <span className="jt-bracket">{row.bracket}</span>
+              {!row.expanded && <span className="jt-ellipsis">{'\u2026'} {row.count} 项</span>}
+            </div>
+          );
+        })}
       </div>
-      {open && entries.map(([k, v]) => (
-        <JsonTree key={k} data={v} depth={depth + 1} name={k} />
-      ))}
-      {open && (
-        <div className="jt-row" style={{ paddingLeft: depth * 16 }}>
-          <span className="jt-toggle-placeholder" />
-          <span className="jt-bracket">{brackets[1]}</span>
-        </div>
-      )}
     </div>
   );
 }
