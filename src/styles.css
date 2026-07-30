@@ -1066,6 +1066,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 .about-desc { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
 .about-link { color: var(--accent); text-decoration: none; }
 .about-link:hover { text-decoration: underline; }
+.about-update-btn { margin-left: auto; flex-shrink: 0; font-size: 12px; }
 
 /* ==== 全局变量 ==== */
 .env-dot-global { color: var(--purple); }

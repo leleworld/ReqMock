@@ -138,6 +138,9 @@ export default function App() {
   const [consoleLogs, setConsoleLogs] = useState([]); // 控制台：请求日志（会话级）
   const [scriptLogs, setScriptLogs] = useState([]); // 控制台：脚本 console 输出（会话级）
   const [kbdOpen, setKbdOpen] = useState(false); // 状态栏快捷键速查弹层
+  const [updateProgress, setUpdateProgress] = useState(null); // 新版本下载进度百分比（null=未在下载）
+  // 手动点了"检查更新"时置位：无更新/失败才弹 toast，启动静默检查不打扰
+  const manualUpdateCheckRef = useRef(false);
 
   // 当前激活标签页及其派生状态（仅请求类标签持有 request）
   const curTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -308,6 +311,50 @@ export default function App() {
   const handleToggleNotices = () => {
     if (!noticesOpen) setNoticeUnread(0);
     setNoticesOpen(!noticesOpen);
+  };
+
+  // ---- 自动更新：主进程事件 → 确认弹窗/状态栏进度/toast ----
+  useEffect(() => {
+    const unsub = window.api.onUpdateEvent((evt) => {
+      if (evt.type === 'available') {
+        manualUpdateCheckRef.current = false;
+        pushNotice(`发现新版本 v${evt.version}`, 'info');
+        setConfirm({
+          title: '发现新版本',
+          message: `新版本 v${evt.version} 可用，是否立即下载？下载完成后会提示重启安装。`,
+          onConfirm: () => { setUpdateProgress(0); window.api.downloadUpdate(); }
+        });
+      } else if (evt.type === 'not-available') {
+        if (manualUpdateCheckRef.current) showToast('当前已是最新版本', 'success');
+        manualUpdateCheckRef.current = false;
+      } else if (evt.type === 'progress') {
+        setUpdateProgress(Math.min(100, Math.round(evt.percent || 0)));
+      } else if (evt.type === 'downloaded') {
+        setUpdateProgress(null);
+        setConfirm({
+          title: '更新已就绪',
+          message: `v${evt.version} 下载完成，立即重启安装？取消则在退出应用时自动安装。`,
+          onConfirm: () => window.api.installUpdate()
+        });
+      } else if (evt.type === 'error') {
+        setUpdateProgress(null);
+        if (manualUpdateCheckRef.current) showToast('检查更新失败：' + evt.message, 'error');
+        else pushNotice('自动更新失败：' + evt.message, 'error');
+        manualUpdateCheckRef.current = false;
+      }
+    });
+    return unsub;
+  }, [showToast, pushNotice]);
+
+  /** 设置页"检查更新"：结果统一由 update:event 回调展示 */
+  const handleCheckUpdate = async () => {
+    manualUpdateCheckRef.current = true;
+    const res = await window.api.checkUpdate();
+    if (res && !res.ok) {
+      manualUpdateCheckRef.current = false;
+      if (res.reason === 'dev') showToast('开发模式下不支持检查更新（需安装包环境）', 'warn');
+      else showToast('检查更新失败：' + (res.error || '未知错误'), 'error');
+    }
   };
 
   // 通知中心打开后：点击弹层外部或按 Esc 自动关闭（✉ 按钮自身除外，避免关闭后又被切换重开）
@@ -1400,6 +1447,9 @@ export default function App() {
           onClick={() => setConsoleOpen(!consoleOpen)}
         >▤ 控制台</span>
         <span className="flex-spacer" />
+        {updateProgress != null && (
+          <span className="status-item status-item-on" title="正在下载新版本安装包">⇣ 更新下载 {updateProgress}%</span>
+        )}
         {curTab.kind === 'request' && curTab.sending && <span className="status-item status-item-on">发送中…</span>}
         {curTab.kind === 'request' && !curTab.sending && curTab.response && curTab.response.ok && (
           <span className="status-item">
@@ -1477,6 +1527,7 @@ export default function App() {
           onChange={handleChangeSettings}
           onBackup={handleBackupData}
           onRestore={handleRestoreBackup}
+          onCheckUpdate={handleCheckUpdate}
           onClose={() => setModal(null)}
         />
       )}

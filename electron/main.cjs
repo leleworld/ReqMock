@@ -12,6 +12,7 @@ const { MockServer } = require('./mockServer.cjs');
 const { WsManager } = require('./wsClient.cjs');
 const { SseManager } = require('./sseClient.cjs');
 const { Store } = require('./store.cjs');
+const { initUpdater } = require('./updater.cjs');
 
 let mainWindow = null;
 let store = null;
@@ -231,6 +232,8 @@ app.whenReady().then(() => {
   };
   wsManager = new WsManager(broadcast('ws:event'));
   sseManager = new SseManager(broadcast('sse:event'));
+  // 自动更新：事件广播到全部窗口，渲染层负责确认下载/安装交互
+  initUpdater(broadcast('update:event'));
   registerIpc();
   createWindow();
 

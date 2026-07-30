@@ -32,6 +32,12 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://YOUR-UPDATE-SERVER.example.com/reqmock/updates"
+      }
+    ],
     "win": {
       "icon": "build/icon.png",
       "target": [
@@ -57,6 +63,7 @@
     "@jetbrains/icons": "^5.23.0",
     "@lezer/highlight": "^1.2.3",
     "codemirror": "^6.0.2",
+    "electron-updater": "^6.8.9",
     "framer-motion": "^12.43.0",
     "ws": "^8.21.1"
   }

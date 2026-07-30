@@ -318,7 +318,7 @@ export function ExportCollectionModal({ collection, onConfirm, onClose }) {
 /**
  * 应用设置：主题 / 强调色 / 请求响应布局 / Cookie 自动管理开关 / 数据备份
  */
-export function SettingsModal({ settings, onChange, onBackup, onRestore, onClose }) {
+export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheckUpdate, onClose }) {
   return (
     <Modal title="设置" onClose={onClose} width={440}>
       <div className="settings-row">
@@ -391,6 +391,7 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onClose
           <div className="about-name">ReqMock <span className="about-version">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</span></div>
           <div className="about-desc">API 调试客户端 + Mock 服务桌面工具 · <a className="about-link" href="https://github.com/leleworld/ReqMock" target="_blank" rel="noreferrer">GitHub</a></div>
         </div>
+        <button className="btn-secondary about-update-btn" onClick={onCheckUpdate}>检查更新</button>
       </div>
       <div className="modal-footer">
         <button className="btn-primary" onClick={onClose}>完成</button>

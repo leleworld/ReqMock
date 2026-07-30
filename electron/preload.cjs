@@ -55,5 +55,15 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on('script:changed', listener);
     return () => ipcRenderer.removeListener('script:changed', listener);
+  },
+
+  // 自动更新：检查/下载/重启安装 + 进度事件监听
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateEvent: (callback) => {
+    const listener = (event, evt) => callback(evt);
+    ipcRenderer.on('update:event', listener);
+    return () => ipcRenderer.removeListener('update:event', listener);
   }
 });
