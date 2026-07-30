@@ -12,6 +12,9 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
   server: {
+    // 固定监听 IPv4：部分 Windows 环境下 localhost 优先解析为 ::1，vite 只听 IPv6 会导致
+    // Electron 走 IPv4 连接时 ERR_EMPTY_RESPONSE，窗口黑屏
+    host: '127.0.0.1',
     port: 5173,
     strictPort: true
   },
