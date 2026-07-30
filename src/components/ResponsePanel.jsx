@@ -1,0 +1,743 @@
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { pageIn, tabIn } from '../utils/motionPresets.js';
+import { tokenizeJson, HIGHLIGHT_MAX_LENGTH } from '../utils/highlightUtil.js';
+import { tryDecodeSelection } from '../utils/toolboxUtil.js';
+import { explainRequestError } from '../utils/errorExplain.js';
+import { toCurl } from '../utils/curlUtil.js';
+import CodeEditor from './CodeEditor.jsx';
+import { JbIcon } from './Icons.jsx';
+
+/** Hex 视图最大字节数，超出截断避免卡顿 */
+const HEX_MAX_BYTES = 64 * 1024;
+/** 体内搜索最大命中数 */
+const SEARCH_MAX_HITS = 5000;
+
+/**
+ * 响应面板：状态行 + Body(Pretty/Raw/Tree/Hex + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
+ * 失败时展示诊断视图：错误解释 + 排查建议 + 实际发送的请求 + 重试/复制 cURL 等快捷动作
+ */
+export default function ResponsePanel({
+  response, sending, scriptResult, onResponseToMock, onToast,
+  layout, onToggleLayout, historyList = [], onSelectHistory,
+  onRetry, onRetryNoSsl, onOpenConsole
+}) {
+  const [tab, setTab] = useState('body');
+  const [view, setView] = useState('pretty');
+  const [histOpen, setHistOpen] = useState(false); // 响应历史下拉
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [caseSense, setCaseSense] = useState(false);
+  const [regexOn, setRegexOn] = useState(false);
+  const [hitIdx, setHitIdx] = useState(0);
+  const [wrapOn, setWrapOn] = useState(true); // 正文自动换行开关
+  const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
+  const contentRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // JSON 响应美化 + 语法高亮（超长内容降级为纯文本）
+  const { prettyBody, tokens } = useMemo(() => {
+    if (!response || !response.ok) return { prettyBody: '', tokens: null };
+    try {
+      const pretty = JSON.stringify(JSON.parse(response.body), null, 2);
+      if (pretty.length <= HIGHLIGHT_MAX_LENGTH) {
+        return { prettyBody: pretty, tokens: tokenizeJson(pretty) };
+      }
+      return { prettyBody: pretty, tokens: null };
+    } catch (e) {
+      return { prettyBody: response.body, tokens: null };
+    }
+  }, [response]);
+
+  // Tree 视图解析结果（非 JSON 时不可用）
+  const parsedJson = useMemo(() => {
+    if (!response || !response.ok) return { ok: false };
+    try {
+      return { ok: true, data: JSON.parse(response.body) };
+    } catch (e) {
+      return { ok: false };
+    }
+  }, [response]);
+
+  // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号
+  const searchInfo = useMemo(() => {
+    if (!searchOpen || !query || !response || !response.ok) return null;
+    const text = view === 'raw' ? response.body : prettyBody;
+    let re;
+    try {
+      const src = regexOn ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      re = new RegExp(src, caseSense ? 'g' : 'gi');
+    } catch (e) {
+      return { error: true, segments: null, count: 0 };
+    }
+    const segments = [];
+    let count = 0;
+    let last = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[0] === '') { re.lastIndex++; continue; }
+      if (m.index > last) segments.push({ t: text.slice(last, m.index) });
+      segments.push({ t: m[0], hit: count++ });
+      last = m.index + m[0].length;
+      if (count >= SEARCH_MAX_HITS) break;
+    }
+    if (last < text.length) segments.push({ t: text.slice(last) });
+    return { error: false, segments, count };
+  }, [searchOpen, query, caseSense, regexOn, view, prettyBody, response]);
+
+  const hitCount = searchInfo && !searchInfo.error ? searchInfo.count : 0;
+  const curHit = hitCount > 0 ? ((hitIdx % hitCount) + hitCount) % hitCount : 0;
+
+  // 搜索条件变化时回到第一个命中
+  useEffect(() => { setHitIdx(0); }, [query, caseSense, regexOn, view]);
+
+  // 当前命中滚动到可视区域中央
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const el = contentRef.current.querySelector('.search-hit-active');
+    if (el) el.scrollIntoView({ block: 'center' });
+  }, [curHit, searchInfo]);
+
+  // 打开搜索栏时聚焦输入框
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) searchInputRef.current.focus();
+  }, [searchOpen]);
+
+  // 历史下拉展开后：点击弹层外部或按 Esc 自动关闭
+  useEffect(() => {
+    if (!histOpen) return;
+    const onMouseDown = (e) => {
+      if (!(e.target instanceof Element)) return;
+      if (e.target.closest('.resp-history-anchor')) return;
+      setHistOpen(false);
+    };
+    const onKeyDown = (e) => { if (e.key === 'Escape') setHistOpen(false); };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [histOpen]);
+
+  // 布局切换按钮：四种面板状态（空/发送中/成功/失败）均可达
+  const layoutBtn = onToggleLayout ? (
+    <button
+      className="icon-btn"
+      title={layout === 'vertical' ? '切换为左右分栏' : '切换为上下分栏'}
+      onClick={onToggleLayout}
+    >{layout === 'vertical' ? '◫' : '⊟'}</button>
+  ) : null;
+
+  // 响应历史回看：同一标签多次发送的响应可回看对比（会话级）
+  const historyBtn = historyList.length > 1 ? (
+    <span className="resp-history-anchor">
+      <button
+        className={histOpen ? 'icon-btn on' : 'icon-btn'}
+        title="回看本标签最近的响应"
+        onClick={() => setHistOpen(!histOpen)}
+      >⏱ {historyList.length}</button>
+      {histOpen && (
+        <div className="ctx-menu resp-history-menu">
+          {historyList.map((h) => (
+            <div
+              key={h.id}
+              className="ctx-item"
+              onClick={() => { setHistOpen(false); onSelectHistory && onSelectHistory(h); }}
+            >
+              <span className="ctx-check">{response === h.response ? '✓' : ''}</span>
+              {h.response.ok ? (
+                <span className={`status-tag ${h.response.status < 400 ? 'status-good' : 'status-bad'}`}>{h.response.status}</span>
+              ) : (
+                <span className="status-tag status-bad">失败</span>
+              )}
+              <span className="ctx-label">{h.time}</span>
+              {h.response.timeMs != null && <span className="ctx-kbd">{h.response.timeMs} ms</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  ) : null;
+
+  if (sending) {
+    return (
+      <div className="response-panel">
+        <div className="response-corner">{layoutBtn}</div>
+        <div className="response-placeholder">
+          <div className="loading-box">
+            <span className="spinner" />
+            <span className="loading-text">请求发送中…</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!response) {
+    return (
+      <div className="response-panel">
+        <div className="response-corner">{layoutBtn}</div>
+        <div className="response-placeholder">发送请求后在此查看响应</div>
+      </div>
+    );
+  }
+  if (!response.ok) {
+    return (
+      <FailureView
+        response={response}
+        scriptResult={scriptResult}
+        historyBtn={historyBtn}
+        layoutBtn={layoutBtn}
+        onRetry={onRetry}
+        onRetryNoSsl={onRetryNoSsl}
+        onOpenConsole={onOpenConsole}
+        onToast={onToast}
+      />
+    );
+  }
+
+  const statusClass = response.status < 400 ? 'status-good' : 'status-bad';
+  const testCount = scriptResult ? scriptResult.tests.length : 0;
+  const testFailed = scriptResult ? scriptResult.tests.filter((t) => !t.passed).length : 0;
+  const hasScriptInfo = scriptResult && (testCount > 0 || scriptResult.logs.length > 0 || scriptResult.errors.length > 0);
+  const trace = response.trace || [];
+  const setCookies = response.setCookies || [];
+
+  /** 下载响应体：按 Content-Type 推断扩展名，复用导出通道 */
+  const handleDownload = async () => {
+    const ctEntry = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type');
+    const ext = contentTypeToExt(ctEntry ? ctEntry[1] : '');
+    const res = await window.api.exportFile({
+      defaultName: `response-${Date.now()}.${ext}`,
+      content: response.body
+    });
+    if (res && res.ok) onToast && onToast('已保存：' + res.filePath);
+    else if (res && res.error) onToast && onToast('保存失败：' + res.error);
+  };
+
+  /** 复制当前视图的响应体（Pretty 复制美化后文本，其他复制原文） */
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(view === 'pretty' ? prettyBody : response.body);
+      onToast && onToast('已复制响应体');
+    } catch (e) {
+      onToast && onToast('复制失败：' + e.message);
+    }
+  };
+
+  /** 选中文本尝试 JWT / Base64 即时解码，浮层跟随鼠标 */
+  const handleMouseUp = (e) => {
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : '';
+    if (!text || text.length > 4096) { setDecodeTip(null); return; }
+    const d = tryDecodeSelection(text);
+    if (d) {
+      setDecodeTip({
+        ...d,
+        x: Math.min(e.clientX + 8, window.innerWidth - 380),
+        y: Math.min(e.clientY + 12, window.innerHeight - 200)
+      });
+    } else {
+      setDecodeTip(null);
+    }
+  };
+
+  /** 带搜索命中标记的正文渲染（搜索激活时跳过语法高亮保证 mark 位置精确） */
+  const searchActive = !!(searchInfo && !searchInfo.error && query);
+  const renderBodyText = () => {
+    if (searchActive) {
+      return searchInfo.segments.map((seg, i) =>
+        seg.hit != null
+          ? <mark key={i} className={seg.hit === curHit ? 'search-hit search-hit-active' : 'search-hit'}>{seg.t}</mark>
+          : seg.t
+      );
+    }
+    if (view === 'raw') return response.body;
+    return tokens
+      ? tokens.map((t, i) =>
+          t.type === 'plain' ? t.text : <span key={i} className={`tok-${t.type}`}>{t.text}</span>
+        )
+      : prettyBody;
+  };
+
+  return (
+    <motion.div className="response-panel" {...pageIn}>
+      <div className="response-status">
+        <span className={`status-tag ${statusClass}`}>{response.status} {response.statusText}</span>
+        <span className="meta">HTTP/{response.httpVersion || '1.1'}</span>
+        <span className="meta">{response.timeMs} ms</span>
+        <span className="meta">{formatSize(response.sizeBytes)}</span>
+        <span className="flex-spacer" />
+        {historyBtn}
+        <button className="btn-secondary" onClick={onResponseToMock}>响应转 Mock</button>
+        {layoutBtn}
+      </div>
+
+      <div className="editor-tabs">
+        <button className={tab === 'body' ? 'active' : ''} onClick={() => setTab('body')}>Body</button>
+        <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
+          Headers ({Object.keys(response.headers).length})
+        </button>
+        {setCookies.length > 0 && (
+          <button className={tab === 'cookies' ? 'active' : ''} onClick={() => setTab('cookies')}>
+            Cookies ({setCookies.length})
+          </button>
+        )}
+        {response.timings && (
+          <button className={tab === 'timings' ? 'active' : ''} onClick={() => setTab('timings')}>耗时</button>
+        )}
+        {trace.length > 1 && (
+          <button className={tab === 'trace' ? 'active' : ''} onClick={() => setTab('trace')}>
+            重定向 ({trace.length - 1})
+          </button>
+        )}
+        {hasScriptInfo && (
+          <button className={tab === 'tests' ? 'active' : ''} onClick={() => setTab('tests')}>
+            测试 {testCount > 0 && (testFailed > 0 ? `(${testCount - testFailed}/${testCount}✗)` : `(${testCount}✓)`)}
+          </button>
+        )}
+      </div>
+
+      {tab === 'body' && (
+        <div className="body-toolbar">
+          <div className="view-switch">
+            {[['pretty', 'Pretty'], ['raw', 'Raw'], ['tree', 'Tree'], ['hex', 'Hex']].map(([v, label]) => (
+              <button
+                key={v}
+                className={view === v ? 'active' : ''}
+                disabled={v === 'tree' && !parsedJson.ok}
+                title={v === 'tree' && !parsedJson.ok ? '响应不是 JSON' : undefined}
+                onClick={() => setView(v)}
+              >{label}</button>
+            ))}
+          </div>
+          <span className="flex-spacer" />
+          <button
+            className={searchOpen ? 'icon-btn on' : 'icon-btn'}
+            title="在响应体中搜索"
+            onClick={() => setSearchOpen(!searchOpen)}
+          ><JbIcon name="search" size={14} /></button>
+          <button
+            className={wrapOn ? 'icon-btn on' : 'icon-btn'}
+            title={wrapOn ? '关闭自动换行' : '开启自动换行'}
+            onClick={() => setWrapOn(!wrapOn)}
+          ><JbIcon name="wrap" size={14} /></button>
+          <button className="icon-btn" title="复制响应体" onClick={handleCopy}><JbIcon name="copy" size={14} /></button>
+          <button className="icon-btn" title="下载响应体为文件" onClick={handleDownload}><JbIcon name="download" size={14} /></button>
+        </div>
+      )}
+
+      {tab === 'body' && searchOpen && (
+        <div className="body-search-bar">
+          <input
+            ref={searchInputRef}
+            className="body-search-input"
+            placeholder="搜索响应体…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setHitIdx(e.shiftKey ? hitIdx - 1 : hitIdx + 1);
+              if (e.key === 'Escape') { setSearchOpen(false); setQuery(''); }
+            }}
+          />
+          <button
+            className={caseSense ? 'search-toggle on' : 'search-toggle'}
+            title="区分大小写"
+            onClick={() => setCaseSense(!caseSense)}
+          >Aa</button>
+          <button
+            className={regexOn ? 'search-toggle on' : 'search-toggle'}
+            title="正则表达式"
+            onClick={() => setRegexOn(!regexOn)}
+          >.*</button>
+          <span className={`search-count ${searchInfo && searchInfo.error ? 'search-count-err' : ''}`}>
+            {searchInfo && searchInfo.error
+              ? '正则错误'
+              : query ? `${hitCount ? curHit + 1 : 0}/${hitCount}` : ''}
+          </span>
+          <button className="search-toggle" title="上一个 (Shift+Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx - 1)}>↑</button>
+          <button className="search-toggle" title="下一个 (Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx + 1)}>↓</button>
+          <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}>✕</button>
+          {(view === 'tree' || view === 'hex') && <span className="env-hint">搜索仅在 Pretty / Raw 视图生效</span>}
+        </div>
+      )}
+
+      <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
+        {/* 页签/视图切换时整体缓动入场；滚动容器下沉到 pane 层 */}
+        <motion.div className="response-pane" key={`${tab}-${view}`} {...tabIn}>
+        {/* Pretty 视图：CodeMirror 只读展示（行号 + 层级折叠）；面板搜索激活时回退 mark 渲染保证命中定位 */}
+        {tab === 'body' && view === 'pretty' && !searchActive && (
+          <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
+        )}
+        {tab === 'body' && ((view === 'pretty' && searchActive) || view === 'raw') && (
+          <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
+        )}
+        {tab === 'body' && view === 'tree' && (
+          parsedJson.ok
+            ? <div className="json-tree"><JsonTree data={parsedJson.data} depth={0} /></div>
+            : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>
+        )}
+        {tab === 'body' && view === 'hex' && <HexView text={response.body} />}
+        {tab === 'headers' && (
+          <table className="headers-table">
+            <tbody>
+              {Object.entries(response.headers).map(([k, v]) => (
+                <tr key={k}>
+                  <td className="header-key">{k}</td>
+                  <td className="header-value">{v}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'cookies' && (
+          <table className="headers-table">
+            <tbody>
+              {setCookies.map((c, i) => (
+                <tr key={i}>
+                  <td className="header-key">Set-Cookie</td>
+                  <td className="header-value">{typeof c === 'string' ? c : c.raw}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {tab === 'timings' && response.timings && <TimingsView timings={response.timings} />}
+        {tab === 'trace' && <TraceView trace={trace} />}
+        {tab === 'tests' && scriptResult && <ScriptResultView result={scriptResult} />}
+        </motion.div>
+      </div>
+
+      {decodeTip && (
+        <div className="decode-tip" style={{ left: decodeTip.x, top: decodeTip.y }}>
+          <div className="decode-tip-title">
+            {decodeTip.kind === 'jwt' ? 'JWT 解码' : 'Base64 解码'}
+            <span className="decode-tip-close" onClick={() => setDecodeTip(null)}>✕</span>
+          </div>
+          <pre className="decode-tip-body">{decodeTip.text}</pre>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+/**
+ * 失败诊断视图：错误码/失败阶段 + 中文解释 + 原始错误 + 排查建议
+ * + 实际发送的请求（变量已替换）+ 重试 / 关 SSL 重试 / 复制 cURL / 控制台入口
+ */
+function FailureView({ response, scriptResult, historyBtn, layoutBtn, onRetry, onRetryNoSsl, onOpenConsole, onToast }) {
+  const explain = useMemo(() => explainRequestError(response), [response]);
+  const finalReq = response.finalRequest || null;
+  const failUrl = useMemo(() => buildSentUrl(finalReq), [finalReq]);
+  const sentHeaders = finalReq
+    ? (finalReq.headers || []).filter((h) => h.enabled !== false && h.key)
+    : [];
+  const failTrace = response.trace || [];
+
+  const copyText = async (text, tip) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      onToast && onToast(tip);
+    } catch (e) {
+      onToast && onToast('复制失败：' + e.message);
+    }
+  };
+
+  return (
+    <motion.div className="response-panel" {...pageIn}>
+      <div className="response-status">
+        <span className="status-tag status-bad">请求失败</span>
+        {explain.code && <span className="fail-code-tag">{explain.code}</span>}
+        {response.timeMs != null && <span className="meta">{response.timeMs} ms</span>}
+        {explain.phaseLabel && <span className="meta">失败于：{explain.phaseLabel}</span>}
+        <span className="flex-spacer" />
+        {historyBtn}
+        {layoutBtn}
+      </div>
+      <div className="fail-view">
+        <div className="fail-card">
+          <div className="fail-title">
+            <span className="fail-icon">⚠</span>
+            <span>{explain.title}</span>
+          </div>
+          <div className="fail-raw-row">
+            <pre className="fail-raw">{response.error || '（无错误详情）'}</pre>
+            <button
+              className="icon-btn"
+              title="复制错误信息"
+              onClick={() => copyText(response.error || '', '已复制错误信息')}
+            ><JbIcon name="copy" size={14} /></button>
+          </div>
+          {explain.suggestions.length > 0 && (
+            <div className="fail-suggests">
+              <div className="fail-suggests-title">排查建议</div>
+              {explain.suggestions.map((s, i) => (
+                <div key={i} className="fail-suggest-item"><span className="fail-suggest-dot">•</span>{s}</div>
+              ))}
+            </div>
+          )}
+          <div className="fail-actions">
+            {onRetry && <button className="btn-primary" onClick={onRetry}>重试</button>}
+            {explain.sslRelated && onRetryNoSsl && (
+              <button className="btn-secondary" onClick={onRetryNoSsl}>关闭 SSL 校验并重试</button>
+            )}
+            {finalReq && (
+              <button className="btn-secondary" onClick={() => copyText(toCurl(finalReq), 'cURL 命令已复制')}>复制 cURL</button>
+            )}
+            {onOpenConsole && <button className="btn-secondary" onClick={onOpenConsole}>查看控制台日志</button>}
+          </div>
+        </div>
+
+        {finalReq && (
+          <details className="fail-section" open>
+            <summary>实际发送的请求（变量已替换）</summary>
+            <div className="fail-req-line">
+              <span className={`method method-${finalReq.method}`}>{finalReq.method}</span>
+              <span className="fail-req-url">{failUrl}</span>
+              <button
+                className="icon-btn"
+                title="复制最终 URL"
+                onClick={() => copyText(failUrl, '已复制最终 URL')}
+              ><JbIcon name="copy" size={14} /></button>
+            </div>
+            {(finalReq.proxy || finalReq.timeoutMs) && (
+              <div className="fail-req-meta">
+                {finalReq.timeoutMs ? <span className="meta">超时：{finalReq.timeoutMs} ms</span> : null}
+                {finalReq.proxy ? <span className="meta">代理：{finalReq.proxy}</span> : null}
+              </div>
+            )}
+            {sentHeaders.length > 0 && (
+              <table className="headers-table">
+                <tbody>
+                  {sentHeaders.map((h, i) => (
+                    <tr key={i}>
+                      <td className="header-key">{h.key}</td>
+                      <td className="header-value">{h.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </details>
+        )}
+
+        {failTrace.length > 0 && (
+          <details className="fail-section">
+            <summary>失败前的重定向链路（{failTrace.length} 跳）</summary>
+            <TraceView trace={failTrace} />
+          </details>
+        )}
+
+        {scriptResult && <ScriptResultView result={scriptResult} />}
+      </div>
+    </motion.div>
+  );
+}
+
+/** 把 Params 表合进 URL，还原实际发出的最终地址（与 httpClient 拼接逻辑一致） */
+function buildSentUrl(finalReq) {
+  if (!finalReq) return '';
+  try {
+    const u = new URL(finalReq.url);
+    for (const p of finalReq.params || []) {
+      if (p.key) u.searchParams.delete(p.key);
+    }
+    for (const p of finalReq.params || []) {
+      if (p.enabled !== false && p.key) u.searchParams.append(p.key, p.value ?? '');
+    }
+    return u.toString();
+  } catch (e) {
+    return finalReq.url || '';
+  }
+}
+
+/** JSON Tree 折叠视图：对象/数组可展开收起，前两层默认展开 */
+function JsonTree({ data, depth, name }) {
+  const isObj = data !== null && typeof data === 'object';
+  const [open, setOpen] = useState(depth < 2);
+
+  const label = name !== undefined && (
+    <span className="jt-key">{typeof name === 'number' ? name : `"${name}"`}<span className="jt-colon">: </span></span>
+  );
+
+  if (!isObj) {
+    return (
+      <div className="jt-row" style={{ paddingLeft: depth * 16 }}>
+        <span className="jt-toggle-placeholder" />
+        {label}
+        <span className={`jt-val jt-${data === null ? 'null' : typeof data}`}>
+          {typeof data === 'string' ? `"${data}"` : String(data)}
+        </span>
+      </div>
+    );
+  }
+
+  const isArr = Array.isArray(data);
+  const entries = isArr ? data.map((v, i) => [i, v]) : Object.entries(data);
+  const brackets = isArr ? ['[', ']'] : ['{', '}'];
+
+  return (
+    <div>
+      <div className="jt-row jt-clickable" style={{ paddingLeft: depth * 16 }} onClick={() => setOpen(!open)}>
+        <span className="jt-toggle">{open ? '▾' : '▸'}</span>
+        {label}
+        <span className="jt-bracket">{brackets[0]}</span>
+        {!open && <span className="jt-ellipsis">… {entries.length} 项 {brackets[1]}</span>}
+      </div>
+      {open && entries.map(([k, v]) => (
+        <JsonTree key={k} data={v} depth={depth + 1} name={k} />
+      ))}
+      {open && (
+        <div className="jt-row" style={{ paddingLeft: depth * 16 }}>
+          <span className="jt-toggle-placeholder" />
+          <span className="jt-bracket">{brackets[1]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Hex 视图：offset + 16 字节十六进制 + ASCII，超长截断 */
+function HexView({ text }) {
+  const { rows, truncated, total } = useMemo(() => {
+    const bytes = new TextEncoder().encode(text || '');
+    const limit = Math.min(bytes.length, HEX_MAX_BYTES);
+    const rows = [];
+    for (let off = 0; off < limit; off += 16) {
+      const chunk = bytes.subarray(off, Math.min(off + 16, limit));
+      let hex = '';
+      let ascii = '';
+      for (let i = 0; i < 16; i++) {
+        if (i < chunk.length) {
+          hex += chunk[i].toString(16).padStart(2, '0') + ' ';
+          ascii += chunk[i] >= 0x20 && chunk[i] <= 0x7e ? String.fromCharCode(chunk[i]) : '·';
+        } else {
+          hex += '   ';
+        }
+        if (i === 7) hex += ' ';
+      }
+      rows.push({ offset: off.toString(16).padStart(8, '0'), hex, ascii });
+    }
+    return { rows, truncated: bytes.length > HEX_MAX_BYTES, total: bytes.length };
+  }, [text]);
+
+  return (
+    <div className="hex-view">
+      {rows.map((r) => (
+        <div key={r.offset} className="hex-row">
+          <span className="hex-offset">{r.offset}</span>
+          <span className="hex-bytes">{r.hex}</span>
+          <span className="hex-ascii">{r.ascii}</span>
+        </div>
+      ))}
+      {truncated && <div className="env-hint">已截断，仅显示前 {HEX_MAX_BYTES / 1024} KB（共 {(total / 1024).toFixed(1)} KB）</div>}
+    </div>
+  );
+}
+
+/** 阶段耗时条形图：DNS / TCP / TLS / 首字节 / 下载 */
+function TimingsView({ timings }) {
+  const stages = [
+    { key: 'dns', label: 'DNS 解析' },
+    { key: 'connect', label: 'TCP 连接' },
+    { key: 'tls', label: 'TLS 握手' },
+    { key: 'ttfb', label: '等待首字节' },
+    { key: 'download', label: '内容下载' }
+  ].filter((s) => timings[s.key] != null && timings[s.key] >= 0);
+  const total = Math.max(timings.total || 1, 1);
+
+  return (
+    <div className="timings-view">
+      {stages.map((s) => (
+        <div key={s.key} className="timing-row">
+          <span className="timing-label">{s.label}</span>
+          <div className="timing-bar-track">
+            <div
+              className="timing-bar"
+              style={{ width: `${Math.max((timings[s.key] / total) * 100, 0.5)}%` }}
+            />
+          </div>
+          <span className="timing-value">{timings[s.key]} ms</span>
+        </div>
+      ))}
+      <div className="timing-row timing-total">
+        <span className="timing-label">总耗时（末跳）</span>
+        <div className="timing-bar-track" />
+        <span className="timing-value">{timings.total} ms</span>
+      </div>
+      <div className="env-hint">复用连接时无 DNS / 连接 / 握手阶段；多次重定向时仅统计最后一跳</div>
+    </div>
+  );
+}
+
+/** 重定向链路列表 */
+function TraceView({ trace }) {
+  return (
+    <div className="trace-view">
+      {trace.map((t, i) => (
+        <div key={i} className="trace-item">
+          <span className="trace-index">{i + 1}</span>
+          <span className={`status-tag ${t.status < 400 ? 'status-good' : 'status-bad'}`}>{t.status}</span>
+          <span className={`method method-${t.method}`}>{t.method}</span>
+          <span className="trace-url" title={t.url}>{t.url}</span>
+          <span className="meta">{t.timeMs} ms</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 脚本执行结果：测试断言 + 控制台输出 + 脚本错误 */
+function ScriptResultView({ result }) {
+  const { tests, logs, errors } = result;
+  return (
+    <div className="script-result">
+      {errors.map((err, i) => (
+        <div key={'e' + i} className="script-error">脚本错误：{err}</div>
+      ))}
+      {tests.length > 0 && (
+        <div className="test-list">
+          {tests.map((t, i) => (
+            <div key={i} className={`test-item ${t.passed ? 'test-pass' : 'test-fail'}`}>
+              <span>{t.passed ? '✓' : '✗'}</span>
+              <span>{t.name}</span>
+              {!t.passed && t.error && <span className="test-error-msg">— {t.error}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {logs.length > 0 && (
+        <div className="script-console">
+          <div className="script-title">控制台输出</div>
+          {logs.map((l, i) => (
+            <pre key={i} className={`console-line console-${l.level}`}>{l.text}</pre>
+          ))}
+        </div>
+      )}
+      {tests.length === 0 && logs.length === 0 && errors.length === 0 && (
+        <div className="empty-hint">脚本未产生测试或输出</div>
+      )}
+    </div>
+  );
+}
+
+/** Content-Type → 下载文件扩展名 */
+function contentTypeToExt(ct) {
+  const t = String(ct || '').toLowerCase();
+  if (t.includes('json')) return 'json';
+  if (t.includes('html')) return 'html';
+  if (t.includes('xml')) return 'xml';
+  if (t.includes('csv')) return 'csv';
+  if (t.includes('javascript')) return 'js';
+  if (t.includes('css')) return 'css';
+  if (t.includes('markdown')) return 'md';
+  if (t.includes('text/')) return 'txt';
+  return 'bin';
+}
+
+function formatSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
