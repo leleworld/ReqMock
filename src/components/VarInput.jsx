@@ -11,6 +11,7 @@ import { resolveVars, findUnresolvedVars } from '../utils/envUtil.js';
 export default function VarInput({ value, onChange, varNames = [], varMap = null, className = '', highlight = false, ...rest }) {
   const [sug, setSug] = useState(null); // { prefix, items }
   const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false); // 悬停也展示环境解析预览
   const inputRef = useRef(null);
   const overlayRef = useRef(null);
 
@@ -69,14 +70,22 @@ export default function VarInput({ value, onChange, varNames = [], varMap = null
 
   const hlOn = highlight && !!String(value ?? '');
 
-  // 当前环境解析预览：聚焦 + 含 {{变量}} 引用 + 未弹补全时显示
+  // 当前环境解析预览：聚焦或悬停 + 含 {{变量}} 引用 + 未弹补全时显示
   const hasVarRef = /\{\{[^}]+\}\}/.test(String(value ?? ''));
-  const previewOn = focused && !sug && !!varMap && hasVarRef;
+  const previewOn = (focused || hovered) && !sug && !!varMap && hasVarRef;
   const resolved = previewOn ? resolveVars(String(value), varMap) : '';
   const missing = previewOn ? findUnresolvedVars(String(value), varMap) : [];
+  // 引用到的变量去重列表（悬停预览逐条展示环境值）
+  const varRefs = previewOn
+    ? [...new Set([...String(value).matchAll(/\{\{([^}]+)\}\}/g)].map((m) => m[1].trim()))]
+    : [];
 
   return (
-    <span className="var-input-wrap">
+    <span
+      className="var-input-wrap"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {hlOn && (
         <span ref={overlayRef} className={`vi-overlay ${className}`} aria-hidden="true">
           {(highlight === 'vars' ? varTokens(value) : urlTokens(value)).map((tk, i) => (
@@ -112,6 +121,18 @@ export default function VarInput({ value, onChange, varNames = [], varMap = null
       )}
       {previewOn && (
         <div className="var-preview">
+          {varRefs.length > 0 && (
+            <span className="var-preview-map">
+              {varRefs.map((n) => (
+                <span key={n} className="var-preview-row">
+                  <span className="var-preview-name">{'{{'}{n}{'}}'}</span>
+                  {n in varMap
+                    ? <span className="var-preview-val">{String(varMap[n]) || '（空值）'}</span>
+                    : <span className="var-preview-missing-inline">未定义</span>}
+                </span>
+              ))}
+            </span>
+          )}
           <span className="var-preview-label">当前环境解析结果</span>
           <span className="var-preview-value">{resolved || '（空）'}</span>
           {missing.length > 0 && (

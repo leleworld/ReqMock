@@ -88,7 +88,7 @@ export default function CodeEditor({ value, onChange, language = 'text', placeho
     const extensions = [
       codeFolding({ placeholderText: '\u22EF' }),
       lineNumbers(),
-      foldGutter({ openText: '▾', closedText: '▸' }),
+      foldGutter({ openText: '▼', closedText: '▶' }),
       bracketMatching(),
       search({ top: true }),
       highlightSelectionMatches(),

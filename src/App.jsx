@@ -1614,6 +1614,8 @@ export default function App() {
                     ownerCollection={findOwnerCollection(collections, activeRequest.id)}
                     onChange={setActiveRequest}
                     onExampleToMock={handleExampleToMock}
+                    headerPresets={settings.headerPresets}
+                    onChangeHeaderPresets={(p) => handleChangeSettings({ headerPresets: p })}
                   />
                   {/* 分栏拖拽手柄：上下布局调高度、左右布局调宽度；双击复位默认比例 */}
                   <div

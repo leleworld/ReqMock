@@ -16,7 +16,7 @@ export default function KeyValueEditor({
   rows, onChange,
   keyPlaceholder = 'Key', valuePlaceholder = 'Value',
   keySuggestions = [], varNames = [], varMap = null, allowBulk = true,
-  label = '', lockedRows = []
+  label = '', lockedRows = [], toolbarExtra = null
 }) {
   const [bulk, setBulk] = useState(false);
   const [showLocked, setShowLocked] = useState(true);
@@ -73,6 +73,7 @@ export default function KeyValueEditor({
     <div className="kv-editor">
       <div className="kv-toolbar">
         {label && <span className="kv-toolbar-label">{label}</span>}
+        {toolbarExtra}
         <span className="flex-spacer" />
         {lockedRows.length > 0 && !bulk && (
           <button

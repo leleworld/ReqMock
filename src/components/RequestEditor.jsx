@@ -11,6 +11,8 @@ import { COMMON_HEADERS } from '../utils/headerNames.js';
 import { tabIn } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
 import { resolveVars } from '../utils/envUtil.js';
+import { applyPresetToHeaders } from '../utils/headerPresets.js';
+import { HeaderPresetsModal } from './Modals.jsx';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
@@ -102,11 +104,14 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets }) {
   // 当前活动页签
   const [tab, setTab] = useState('params');
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
+  // Headers 预设：下拉菜单定位 + 管理弹窗开关
+  const [presetMenu, setPresetMenu] = useState(null);
+  const [presetMgrOpen, setPresetMgrOpen] = useState(false);
   // 外部编辑中的脚本 token → 字段名映射（pre/post）
   const [extEditing, setExtEditing] = useState({});
   const requestRef = useRef(request);
@@ -115,6 +120,14 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   extEditingRef.current = extEditing;
 
   const set = (field, value) => onChange({ ...request, [field]: value });
+
+  // 点击菜单外区域关闭预设下拉
+  useEffect(() => {
+    if (!presetMenu) return;
+    const close = () => setPresetMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [presetMenu]);
 
   // 监听外部编辑器保存回传，写回对应脚本字段
   useEffect(() => {
@@ -229,6 +242,40 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     ...autoHeaders
   ];
 
+  // Headers 工具栏「预设」按钮 + 下拉菜单（应用预设 / 管理预设）
+  const presetsBtn = (
+    <>
+      <button
+        className={`icon-btn kv-bulk-btn ${presetMenu ? 'on' : ''}`}
+        title="应用 HTTP 请求头预设"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (presetMenu) { setPresetMenu(null); return; }
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPresetMenu({ top: rect.bottom + 4, left: rect.left });
+        }}
+      >预设 ▾</button>
+      {presetMenu && (
+        <div className="ctx-menu hp-menu" style={{ top: presetMenu.top, left: presetMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
+          {headerPresets.map((p) => (
+            <div
+              key={p.id}
+              className="ctx-item"
+              title={p.rows.map((r) => `${r.key}: ${r.value}`).join('\n')}
+              onClick={() => { set('headers', applyPresetToHeaders(request.headers, p)); setPresetMenu(null); }}
+            >
+              {p.name}{p.builtIn ? <span className="hp-builtin-tag">内置</span> : null}
+              <span className="ctx-kbd">{p.rows.length} 项</span>
+            </div>
+          ))}
+          <div className="ctx-sep" />
+          <div className="ctx-item" onClick={() => { setPresetMenu(null); setPresetMgrOpen(true); }}>管理预设…</div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="request-editor">
       <div className="editor-tabs">
@@ -273,6 +320,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
             varMap={varMap}
             label="请求头列表"
             lockedRows={lockedHeaderRows}
+            toolbarExtra={presetsBtn}
           />
         )}
         {tab === 'auth' && (
@@ -556,6 +604,13 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
         )}
         </motion.div>
       </div>
+      {presetMgrOpen && (
+        <HeaderPresetsModal
+          presets={headerPresets}
+          onChangePresets={onChangeHeaderPresets}
+          onClose={() => setPresetMgrOpen(false)}
+        />
+      )}
     </div>
   );
 }

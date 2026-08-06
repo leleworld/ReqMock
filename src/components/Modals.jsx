@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { maskFade, modalPop } from '../utils/motionPresets.js';
-import KeyValueEditor from './KeyValueEditor.jsx';
+import KeyValueEditor, { rowsToBulkText, bulkTextToRows } from './KeyValueEditor.jsx';
+import { newPresetId } from '../utils/headerPresets.js';
 import { parseCurl, parseRawHttp } from '../utils/curlUtil.js';
 import { AUTH_TYPES, normalizeAuth } from '../utils/authUtil.js';
 import { CODEGEN_LANGS, generateCode } from '../utils/codegenUtil.js';
@@ -395,6 +396,82 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
       </div>
       <div className="modal-footer">
         <button className="btn-primary" onClick={onClose}>完成</button>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * HTTP 请求头预设管理弹窗：左侧预设列表（内置 + 自定义），右侧编辑区
+ * 选中条目载入编辑；「新建预设」进入空白态；保存新增或覆盖，删除任意预设
+ */
+export function HeaderPresetsModal({ presets, onChangePresets, onClose }) {
+  const [selectedId, setSelectedId] = useState(null); // null = 新建态
+  const selected = presets.find((p) => p.id === selectedId) || null;
+  const [name, setName] = useState('');
+  const [text, setText] = useState('');
+
+  const load = (p) => {
+    setSelectedId(p.id);
+    setName(p.name);
+    setText(rowsToBulkText(p.rows));
+  };
+  const resetNew = () => { setSelectedId(null); setName(''); setText(''); };
+
+  const handleSave = () => {
+    const rows = bulkTextToRows(text).filter((r) => r.key);
+    const trimmed = name.trim();
+    if (!trimmed || rows.length === 0) return;
+    if (selected) {
+      onChangePresets(presets.map((p) => (p.id === selected.id ? { ...p, name: trimmed, rows } : p)));
+    } else {
+      onChangePresets([...presets, { id: newPresetId(), name: trimmed, builtIn: false, rows }]);
+    }
+    resetNew();
+  };
+
+  const handleDelete = (id) => {
+    onChangePresets(presets.filter((p) => p.id !== id));
+    if (selectedId === id) resetNew();
+  };
+
+  return (
+    <Modal title="管理请求头预设" onClose={onClose} width={560}>
+      <div className="hp-layout">
+        <div className="hp-list">
+          {presets.map((p) => (
+            <div
+              key={p.id}
+              className={`hp-item ${p.id === selectedId ? 'selected' : ''}`}
+              onClick={() => load(p)}
+            >
+              <span className="hp-item-name">{p.name}{p.builtIn && <span className="hp-builtin-tag">内置</span>}</span>
+              <span className="hp-item-count">{p.rows.length} 项</span>
+              <span className="item-delete" title="删除该预设" onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}>×</span>
+            </div>
+          ))}
+          <button className={`btn-block hp-new ${selectedId === null ? 'selected' : ''}`} onClick={resetNew}>+ 新建预设</button>
+        </div>
+        <div className="hp-edit">
+          <span className="modal-label">预设名称</span>
+          <input className="modal-input" placeholder="例如：公司网关通用头" value={name} onChange={(e) => setName(e.target.value)} />
+          <span className="modal-label">请求头（每行一条 key: value，行首 # 表示禁用）</span>
+          <textarea
+            className="modal-textarea"
+            placeholder={'X-App-Id: demo\nAuthorization: Bearer {{token}}'}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+          />
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={onClose}>关闭</button>
+            <button
+              className="btn-primary"
+              disabled={!name.trim() || !bulkTextToRows(text).some((r) => r.key)}
+              onClick={handleSave}
+            >{selected ? '保存修改' : '添加预设'}</button>
+          </div>
+        </div>
       </div>
     </Modal>
   );
