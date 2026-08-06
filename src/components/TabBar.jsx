@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GROUP_COLORS } from '../utils/tabGroupUtil.js';
 import { tabIn } from '../utils/motionPresets.js';
 
@@ -7,6 +7,7 @@ import { tabIn } from '../utils/motionPresets.js';
  * 主区统一标签栏：请求 / 环境 / Cookie / Mock / 工具都以标签页承载（Reqable 式）
  * 非请求标签由 tabMeta 提供图标与名称
  * 支持 Chrome 式标签分组：同组标签包进组色容器（徽标 + 底色条），可折叠；右键菜单管理分组
+ * 标签溢出时横向滚动，右侧提供「全部标签」下拉快速定位
  */
 export default function TabBar({
   tabs, groups, activeTabId, tabMeta, isTabDirty,
@@ -14,8 +15,21 @@ export default function TabBar({
   onNewGroup, onAssignGroup, onLeaveGroup,
   onRenameGroup, onRecolorGroup, onToggleGroupCollapse, onUngroup, onCloseGroup
 }) {
-  // 右键菜单：{ type: 'tab', tabId } | { type: 'group', groupId } | { type: 'add' }，含 x/y 弹出坐标
+  // 右键菜单：{ type: 'tab', tabId } | { type: 'group', groupId } | { type: 'add' } | { type: 'all' }，含 x/y 弹出坐标
   const [menu, setMenu] = useState(null);
+  // 标签溢出检测：内容宽度超出可视宽度时显示「全部标签」下拉
+  const listRef = useRef(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 4);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tabs.length]);
 
   useEffect(() => {
     if (!menu) return;
@@ -68,7 +82,7 @@ export default function TabBar({
     );
   };
 
-  // 按顺序渲染：同组连续标签包进带组色底条的容器；折叠的分组只保留激活标签
+  // 按顺序渲染：同组连续标签包进带组色底条的容器；折叠的分组只保留组牌（弹簧动画收合）
   const items = [];
   let i = 0;
   while (i < tabs.length) {
@@ -84,13 +98,14 @@ export default function TabBar({
       members.push(tabs[i]);
       i++;
     }
-    const shown = group.collapsed ? members.filter((t) => t.id === activeTabId) : members;
     items.push(
       <motion.div
         key={'grp-' + group.id}
         className={`tab-group ${group.collapsed ? 'collapsed' : ''}`}
         style={{ '--group-color': group.color }}
+        layout
         {...tabIn}
+        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
       >
         <div
           className="tab-group-chip"
@@ -98,10 +113,24 @@ export default function TabBar({
           onClick={() => onToggleGroupCollapse(group.id)}
           onContextMenu={(e) => openMenu(e, { type: 'group', groupId: group.id })}
         >
+          <span className="tab-group-caret">{group.collapsed ? '▸' : '▾'}</span>
           <span className="tab-group-name">{group.name}</span>
           <span className="tab-group-count">{members.length}</span>
         </div>
-        {shown.map(renderTab)}
+        {/* 成员区折叠/展开走弹簧宽度动画，收起时只留组牌 */}
+        <AnimatePresence initial={false}>
+          {!group.collapsed && (
+            <motion.div
+              className="tab-group-members"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 'auto', opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+            >
+              {members.map(renderTab)}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }
@@ -111,7 +140,7 @@ export default function TabBar({
 
   return (
     <div className="tab-bar">
-      <div className="tab-list">
+      <div className="tab-list" ref={listRef}>
         {items}
         <button
           className="tab-add"
@@ -122,12 +151,46 @@ export default function TabBar({
           }}
         >＋</button>
       </div>
+      {/* 标签溢出时提供全部标签下拉，快速定位被挤出可视区的标签 */}
+      {overflowing && (
+        <button
+          className="tab-all-btn"
+          title={`全部标签（${tabs.length}）`}
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setMenu({ type: 'all', x: Math.min(rect.left, window.innerWidth - 240), y: rect.bottom + 4 });
+          }}
+        >▾</button>
+      )}
 
       {menu && menu.type === 'add' && (
         <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
           <div className="ctx-item" onClick={() => { onNew(); setMenu(null); }}>HTTP 请求</div>
           <div className="ctx-item" onClick={() => { onNewWs(); setMenu(null); }}>WebSocket 连接</div>
           <div className="ctx-item" onClick={() => { onNewSse(); setMenu(null); }}>SSE 连接</div>
+        </div>
+      )}
+
+      {menu && menu.type === 'all' && (
+        <div className="ctx-menu tab-all-menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+          {tabs.map((t) => {
+            const isReq = !t.kind || t.kind === 'request';
+            const meta = isReq ? null : tabMeta(t);
+            const g = t.groupId ? groupOf(t.groupId) : null;
+            return (
+              <div
+                key={t.id}
+                className={`ctx-item ${t.id === activeTabId ? 'ctx-item-active' : ''}`}
+                onClick={() => { onSelect(t.id); setMenu(null); }}
+              >
+                {isReq
+                  ? <span className={`method method-${t.request.method}`}>{t.request.method}</span>
+                  : <span className="tab-icon">{meta.icon}</span>}
+                <span className="ctx-label">{isReq ? (t.request.name || '未命名请求') : meta.label}</span>
+                {g && <span className="ctx-dot" style={{ background: g.color }} title={`分组「${g.name}」`} />}
+              </div>
+            );
+          })}
         </div>
       )}
 

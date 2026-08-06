@@ -417,6 +417,15 @@ export default function App() {
   // ---- 请求/响应分栏拖拽：比例存入 settings 持久化（25%–75%） ----
   const workspaceRef = useRef(null);
   const [splitDrag, setSplitDrag] = useState(false);
+  // 响应专注模式：临时隐藏请求编辑区，Esc 退出；切换标签时自动复位
+  const [focusResponse, setFocusResponse] = useState(false);
+  useEffect(() => { setFocusResponse(false); }, [curTab.id]);
+  useEffect(() => {
+    if (!focusResponse) return;
+    const onKey = (e) => { if (e.key === 'Escape') setFocusResponse(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusResponse]);
   const handleSplitDown = (e) => {
     e.preventDefault();
     const el = workspaceRef.current;
@@ -448,6 +457,13 @@ export default function App() {
 
   /** 修改应用设置（主题/强调色/Cookie 开关）并即时应用主题 */
   const handleChangeSettings = (patch) => {
+    // 主题/强调色变化时给根元素短暂挂上过渡类，颜色平滑切换不闪变
+    const colorChange = ('theme' in patch && patch.theme !== settings.theme) || ('accent' in patch && patch.accent !== settings.accent);
+    if (colorChange) {
+      document.documentElement.classList.add('theme-switching');
+      clearTimeout(handleChangeSettings._tt);
+      handleChangeSettings._tt = setTimeout(() => document.documentElement.classList.remove('theme-switching'), 250);
+    }
     setSettings((prev) => {
       const next = normalizeSettings({ ...prev, ...patch });
       applyTheme(next);
@@ -921,6 +937,7 @@ export default function App() {
       else if (k === 'd') { e.preventDefault(); h.dupTab(); }
       else if (k === 'tab') { e.preventDefault(); h.cycleTab(e.shiftKey ? -1 : 1); }
       else if (k === 'e') { e.preventDefault(); h.cycleEnv(); }
+      else if (k === 'b') { e.preventDefault(); setPanelOpen((v) => !v); }
       else if (k === '/') { e.preventDefault(); setKbdOpen((v) => !v); }
       else if (k === 'n' && e.shiftKey) { e.preventDefault(); window.api.newWindow(); }
     };
@@ -1526,6 +1543,8 @@ export default function App() {
         onToggleNotices={handleToggleNotices}
       />
       <div className="main-area">
+        {/* 发送中顶部流光进度条：比居中 spinner 感知等待更短 */}
+        {curTab.sending && <div className="app-progress" aria-hidden="true"><span className="app-progress-bar" /></div>}
         <TabBar
           tabs={tabs}
           groups={tabGroups}
@@ -1582,24 +1601,29 @@ export default function App() {
               onToast={showToast}
             />
             <div
-              className={`request-workspace layout-${settings.layout}`}
+              className={`request-workspace layout-${settings.layout} ${focusResponse ? 'focus-mode' : ''}`}
               ref={workspaceRef}
               style={{ '--split-v': settings.splitV + '%', '--split-h': settings.splitH + '%' }}
             >
-              <RequestEditor
-                request={activeRequest}
-                varNames={varNames}
-                varMap={buildVarMap(activeEnv, globals)}
-                ownerCollection={findOwnerCollection(collections, activeRequest.id)}
-                onChange={setActiveRequest}
-                onExampleToMock={handleExampleToMock}
-              />
-              {/* 分栏拖拽手柄：上下布局调高度、左右布局调宽度 */}
-              <div
-                className={`split-resizer ${settings.layout === 'horizontal' ? 'split-resizer-h' : 'split-resizer-v'} ${splitDrag ? 'dragging' : ''}`}
-                title="拖拽调整分栏比例"
-                onMouseDown={handleSplitDown}
-              />
+              {!focusResponse && (
+                <>
+                  <RequestEditor
+                    request={activeRequest}
+                    varNames={varNames}
+                    varMap={buildVarMap(activeEnv, globals)}
+                    ownerCollection={findOwnerCollection(collections, activeRequest.id)}
+                    onChange={setActiveRequest}
+                    onExampleToMock={handleExampleToMock}
+                  />
+                  {/* 分栏拖拽手柄：上下布局调高度、左右布局调宽度；双击复位默认比例 */}
+                  <div
+                    className={`split-resizer ${settings.layout === 'horizontal' ? 'split-resizer-h' : 'split-resizer-v'} ${splitDrag ? 'dragging' : ''}`}
+                    title="拖拽调整分栏比例，双击复位"
+                    onMouseDown={handleSplitDown}
+                    onDoubleClick={() => handleChangeSettings({ splitV: 45, splitH: 50 })}
+                  />
+                </>
+              )}
               <ResponsePanel
                 response={curTab.response}
                 sending={curTab.sending}
@@ -1611,6 +1635,8 @@ export default function App() {
                 onToast={showToast}
                 layout={settings.layout}
                 onToggleLayout={() => handleChangeSettings({ layout: settings.layout === 'vertical' ? 'horizontal' : 'vertical' })}
+                focused={focusResponse}
+                onToggleFocus={() => setFocusResponse((v) => !v)}
                 historyList={curTab.responseHistory || []}
                 onSelectHistory={handleSelectHistory}
                 onRetry={handleSend}
@@ -1757,7 +1783,14 @@ export default function App() {
         )}
         {curTab.kind === 'request' && curTab.sending && <span className="status-item status-item-on">发送中…</span>}
         {curTab.kind === 'request' && !curTab.sending && curTab.response && curTab.response.ok && (
-          <span className="status-item">
+          <span
+            className="status-item"
+            title={curTab.response.timings ? (
+              ['dns:DNS', 'connect:TCP', 'tls:TLS', 'ttfb:首字节', 'download:下载']
+                .map((s) => { const [k, label] = s.split(':'); return curTab.response.timings[k] != null ? `${label} ${curTab.response.timings[k]}ms` : null; })
+                .filter(Boolean).join(' · ') || undefined
+            ) : undefined}
+          >
             {curTab.response.status} · {curTab.response.timeMs} ms · {formatKb(curTab.response.sizeBytes)}
           </span>
         )}

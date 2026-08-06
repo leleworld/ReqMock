@@ -87,7 +87,9 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
         onPaste={handlePaste}
       />
       {sending ? (
-        <button className="btn-primary btn-cancel" title="取消发送中的请求" onClick={onCancel}>取消</button>
+        <button className="btn-primary btn-sending" title="请求发送中，点击取消" onClick={onCancel}>
+          <span className="btn-ring" aria-hidden="true" />发送中
+        </button>
       ) : (
         <button className="btn-primary" onClick={onSend}>发送</button>
       )}

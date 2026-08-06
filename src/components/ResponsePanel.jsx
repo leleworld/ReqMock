@@ -21,7 +21,7 @@ const HEX_MAX_BYTES = 512 * 1024;
  */
 export default function ResponsePanel({
   response, sending, scriptResult, onResponseToMock, onToast,
-  layout, onToggleLayout, historyList = [], onSelectHistory,
+  layout, onToggleLayout, focused, onToggleFocus, historyList = [], onSelectHistory,
   onRetry, onRetryNoSsl, onOpenConsole,
   onSaveExample, onSaveBody, onExtractVariable
 }) {
@@ -197,6 +197,17 @@ export default function ResponsePanel({
     >{layout === 'vertical' ? '◫' : '⊟'}</button>
   ) : null;
 
+  // 专注模式按钮：临时隐藏请求编辑区，响应独占全屏（Esc 退出）
+  const focusBtn = onToggleFocus ? (
+    <button
+      className={focused ? 'icon-btn on' : 'icon-btn'}
+      title={focused ? '退出专注模式 (Esc)' : '专注响应：隐藏请求编辑区'}
+      onClick={onToggleFocus}
+    >{focused ? '⤢' : '⤡'}</button>
+  ) : null;
+
+  const cornerActions = <>{focusBtn}{layoutBtn}</>;
+
   // 响应历史回看：同一标签多次发送的响应可回看对比（会话级）
   const historyBtn = historyList.length > 1 ? (
     <span className="resp-history-anchor">
@@ -231,10 +242,15 @@ export default function ResponsePanel({
   if (sending) {
     return (
       <div className="response-panel">
-        <div className="response-corner">{layoutBtn}</div>
+        <div className="response-corner">{cornerActions}</div>
         <div className="response-placeholder">
-          <div className="loading-box">
-            <span className="spinner" />
+          <div className="loading-box" aria-busy="true">
+            <div className="skel-group" aria-hidden="true">
+              <span className="skel-line skel-w1" />
+              <span className="skel-line skel-w2" />
+              <span className="skel-line skel-w3" />
+              <span className="skel-line skel-w1" />
+            </div>
             <span className="loading-text">请求发送中…</span>
           </div>
         </div>
@@ -244,8 +260,18 @@ export default function ResponsePanel({
   if (!response) {
     return (
       <div className="response-panel">
-        <div className="response-corner">{layoutBtn}</div>
-        <div className="response-placeholder">发送请求后在此查看响应</div>
+        <div className="response-corner">{cornerActions}</div>
+        <div className="response-placeholder">
+          <div className="empty-hero">
+            <span className="empty-hero-icon" aria-hidden="true">▶</span>
+            <div className="empty-hero-title">发送请求后在此查看响应</div>
+            <div className="empty-hero-keys">
+              <span className="kbd-chip">Ctrl + Enter</span> 发送
+              <span className="kbd-chip">Ctrl + F</span> 体内搜索
+              <span className="kbd-chip">Ctrl + /</span> 快捷键速查
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -255,7 +281,7 @@ export default function ResponsePanel({
         response={response}
         scriptResult={scriptResult}
         historyBtn={historyBtn}
-        layoutBtn={layoutBtn}
+        layoutBtn={cornerActions}
         onRetry={onRetry}
         onRetryNoSsl={onRetryNoSsl}
         onOpenConsole={onOpenConsole}
@@ -381,7 +407,7 @@ export default function ResponsePanel({
         {historyBtn}
         {onSaveExample && <button className="btn-secondary" title="把当前响应保存为请求示例（示例可一键转 Mock）" onClick={onSaveExample}>存为示例</button>}
         <button className="btn-secondary" onClick={onResponseToMock}>响应转 Mock</button>
-        {layoutBtn}
+        {cornerActions}
       </div>
 
       <LayoutGroup id="resp-tabs">
@@ -492,12 +518,11 @@ export default function ResponsePanel({
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
         {/* 页签/视图切换时整体缓动入场；滚动容器下沉到 pane 层 */}
         <motion.div className="response-pane" key={`${tab}-${view}`} {...tabIn}>
-        {/* Pretty 视图：CodeMirror 只读展示（行号 + 层级折叠）；面板搜索激活时回退 mark 渲染保证命中定位
-             fmtPending 时仍用 CodeMirror（内置 JSON 高亮），避免 Worker 完成前搜索视图显示未格式化原文 */}
-        {tab === 'body' && view === 'pretty' && (!searchActive || fmtPending) && (
+        {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
+        {tab === 'body' && view === 'pretty' && (
           <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
         )}
-        {tab === 'body' && ((view === 'pretty' && searchActive && !fmtPending) || view === 'raw') && (
+        {tab === 'body' && view === 'raw' && (
           <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
         )}
         {tab === 'body' && view === 'tree' && (
