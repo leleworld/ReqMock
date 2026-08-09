@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { motion, LayoutGroup } from 'framer-motion';
-import { pageIn, tabIn } from '../utils/motionPresets.js';
+import { motion, LayoutGroup, AnimatePresence } from 'framer-motion';
+import { pageIn, paneSlide } from '../utils/motionPresets.js';
 import { tokenizeJson, HIGHLIGHT_MAX_LENGTH } from '../utils/highlightUtil.js';
 import JsonFormatWorker from '../utils/jsonFormatWorker.js?worker';
 import { tryDecodeSelection } from '../utils/toolboxUtil.js';
@@ -14,6 +14,20 @@ import { JbIcon } from './Icons.jsx';
 const SEARCH_MAX_HITS = 5000;
 /** Hex 视图最大显示字节数 */
 const HEX_MAX_BYTES = 512 * 1024;
+/** 页签/视图顺序：切换时据序号差决定滑动方向 */
+const RESP_TABS = ['body', 'headers', 'cookies', 'timings', 'trace', 'tests'];
+const RESP_VIEWS = ['pretty', 'raw', 'tree', 'hex', 'preview', 'diff'];
+
+/** 重内容延迟一帧挂载：先出骨架占位，待入场动画起步后再挂 CodeMirror 等大组件，避免同帧卡顿 */
+function DeferredMount({ children }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  if (!ready) return <div className="pane-skeleton" aria-hidden="true"><i /><i /><i /></div>;
+  return children;
+}
 
 /**
  * 响应面板：状态行 + Body(Pretty/Raw/Tree/Hex + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
@@ -37,6 +51,17 @@ export default function ResponsePanel({
   const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // 页签/视图切换方向：序号变大向右滑入，变小向左（渲染期间同步计算，供 AnimatePresence custom 使用）
+  const paneKey = `${tab}-${view}`;
+  const prevPaneKeyRef = useRef(paneKey);
+  const paneDirRef = useRef(1);
+  if (prevPaneKeyRef.current !== paneKey) {
+    const rank = (t, v) => RESP_TABS.indexOf(t) * 10 + RESP_VIEWS.indexOf(v);
+    const [pt, pv] = prevPaneKeyRef.current.split('-');
+    paneDirRef.current = rank(tab, view) >= rank(pt, pv) ? 1 : -1;
+    prevPaneKeyRef.current = paneKey;
+  }
 
   // ── Web Worker 格式化：JSON parse + stringify 完全在独立线程执行，主线程零阻塞 ──
   const [fmtResult, setFmtResult] = useState(null); // { pretty, isJson }
@@ -516,21 +541,28 @@ export default function ResponsePanel({
       )}
 
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
-        {/* 页签/视图切换时整体缓动入场；滚动容器下沉到 pane 层 */}
-        <motion.div className="response-pane" key={`${tab}-${view}`} {...tabIn}>
+        {/* 页签/视图切换时方向滑动交叉淡出；滚动容器下沉到 pane 层；重内容延迟一帧挂载 */}
+        <AnimatePresence initial={false} custom={paneDirRef.current} mode="sync">
+        <motion.div className="response-pane" key={paneKey} custom={paneDirRef.current} {...paneSlide}>
         {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
         {tab === 'body' && view === 'pretty' && (
-          <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
+          <DeferredMount>
+            <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
+          </DeferredMount>
         )}
         {tab === 'body' && view === 'raw' && (
-          <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
+          <DeferredMount>
+            <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
+          </DeferredMount>
         )}
         {tab === 'body' && view === 'tree' && (
-          parsedJson.ok
-            ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onToast={onToast} /></div>
-            : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>
+          <DeferredMount>
+            {parsedJson.ok
+              ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onToast={onToast} /></div>
+              : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>}
+          </DeferredMount>
         )}
-        {tab === 'body' && view === 'hex' && <HexView text={response.body} />}
+        {tab === 'body' && view === 'hex' && <DeferredMount><HexView text={response.body} /></DeferredMount>}
         {tab === 'body' && view === 'preview' && <PreviewView response={response} contentType={respCt} />}
         {tab === 'body' && view === 'diff' && <DiffView response={response} bases={diffBases} />}
         {tab === 'headers' && (
@@ -561,6 +593,7 @@ export default function ResponsePanel({
         {tab === 'trace' && <TraceView trace={trace} />}
         {tab === 'tests' && scriptResult && <ScriptResultView result={scriptResult} />}
         </motion.div>
+        </AnimatePresence>
       </div>
 
       {decodeTip && (

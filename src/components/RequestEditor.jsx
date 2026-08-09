@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import VarInput from './VarInput.jsx';
 import CodeEditor from './CodeEditor.jsx';
@@ -8,7 +8,7 @@ import { AUTH_TYPES, newAuth, previewAuthHeader } from '../utils/authUtil.js';
 import { parseCurl } from '../utils/curlUtil.js';
 import { renderMarkdown } from '../utils/markdownUtil.js';
 import { COMMON_HEADERS } from '../utils/headerNames.js';
-import { tabIn } from '../utils/motionPresets.js';
+import { paneSlide } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
 import { resolveVars } from '../utils/envUtil.js';
 import { applyPresetToHeaders } from '../utils/headerPresets.js';
@@ -106,7 +106,12 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
  */
 export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets }) {
   // 当前活动页签
-  const [tab, setTab] = useState('params');
+  const [tab, setTabRaw] = useState('params');
+  const [tabDir, setTabDir] = useState(1); // 滑动方向：目标页签在右侧为 1，左侧为 -1
+  const setTab = (key) => {
+    setTabDir(TAB_ORDER.indexOf(key) >= TAB_ORDER.indexOf(tab) ? 1 : -1);
+    setTabRaw(key);
+  };
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // Headers 预设：下拉菜单定位 + 管理弹窗开关
@@ -297,7 +302,8 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       </div>
 
       <div className="editor-content">
-        <motion.div className="editor-pane" key={tab} {...tabIn}>
+        <AnimatePresence initial={false} custom={tabDir} mode="sync">
+        <motion.div className="editor-pane" key={tab} custom={tabDir} {...paneSlide}>
         {tab === 'params' && (
           <KeyValueEditor
             rows={request.params}
@@ -603,6 +609,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
           />
         )}
         </motion.div>
+        </AnimatePresence>
       </div>
       {presetMgrOpen && (
         <HeaderPresetsModal

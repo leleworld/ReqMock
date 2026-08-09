@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { badgeSpring, tabIn } from '../utils/motionPresets.js';
+import { badgeSpring, paneSlide } from '../utils/motionPresets.js';
 import CollectionTree from './CollectionTree.jsx';
  import { TOOLS } from './ToolsPanel.jsx';
 import { JbIcon } from './Icons.jsx';
@@ -75,6 +75,14 @@ export default function Sidebar(props) {
   };
 
   const activityMeta = ACTIVITIES.find((a) => a.key === activity);
+  // 活动项切换方向：序号变大向右滑入，变小向左（渲染期间同步计算）
+  const prevActivityRef = useRef(activity);
+  const actDirRef = useRef(1);
+  if (prevActivityRef.current !== activity) {
+    const idx = (k) => ACTIVITIES.findIndex((a) => a.key === k);
+    actDirRef.current = idx(activity) >= idx(prevActivityRef.current) ? 1 : -1;
+    prevActivityRef.current = activity;
+  }
   // 主区当前标签对应的导航条目高亮
   const openEnvId = curTab.kind === 'env' ? curTab.envId : null;
   const openTool = curTab.kind === 'tool' ? curTab.tool : null;
@@ -146,8 +154,9 @@ export default function Sidebar(props) {
           </div>
 
           <div className="side-panel-body">
-            {/* key 随活动项变化触发内容切换微动效 */}
-            <motion.div className="side-panel-pane" key={activity} {...tabIn}>
+            {/* key 随活动项变化触发方向滑动交叉淡出 */}
+            <AnimatePresence initial={false} custom={actDirRef.current} mode="sync">
+            <motion.div className="side-panel-pane" key={activity} custom={actDirRef.current} {...paneSlide}>
             {activity === 'collections' && (
               <>
                 <div className="tree-search-wrap">
@@ -266,6 +275,7 @@ export default function Sidebar(props) {
               </>
             )}
             </motion.div>
+            </AnimatePresence>
           </div>
         </div>
         </motion.div>

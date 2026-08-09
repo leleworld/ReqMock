@@ -307,7 +307,21 @@ body.resizing { user-select: none; cursor: col-resize; }
   background: transparent; color: var(--text-dim); border-radius: var(--radius-s);
 }
 .panel-action:hover { background: var(--bg-hover); color: var(--text); }
-.side-panel-body { flex: 1; overflow-y: auto; padding: 10px; }
+.side-panel-body { flex: 1; overflow-y: auto; padding: 10px; display: grid; position: relative; }
+.side-panel-pane { grid-area: 1 / 1; min-width: 0; }
+/* 大响应内容（CodeMirror 等）延迟一帧挂载期间的骨架占位：微光条提示内容即将出现 */
+.pane-skeleton { display: flex; flex-direction: column; gap: 10px; padding: 14px 4px; }
+.pane-skeleton i {
+  height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--bg-hover) 25%, var(--border) 45%, var(--bg-hover) 65%);
+  background-size: 240% 100%;
+  animation: pane-skeleton-shimmer 0.9s ease-in-out infinite;
+}
+.pane-skeleton i:nth-child(1) { width: 72%; }
+.pane-skeleton i:nth-child(2) { width: 94%; animation-delay: 0.08s; }
+.pane-skeleton i:nth-child(3) { width: 58%; animation-delay: 0.16s; }
+@keyframes pane-skeleton-shimmer { from { background-position: 120% 0; } to { background-position: -80% 0; } }
+@media (prefers-reduced-motion: reduce) { .pane-skeleton i { animation: none; } }
 /* 面板内容动画容器：撑满高度保证拖拽导入区域覆盖完整 */
 .side-panel-pane { min-height: 100%; }
 
@@ -392,9 +406,9 @@ body.resizing { user-select: none; cursor: col-resize; }
   height: 2px; background: var(--accent); border-radius: 1px;
 }
 
-.editor-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; }
-/* 页签内容动画容器：高度撑满保证脚本/文档等 100% 高度布局不变 */
-.editor-pane { height: 100%; }
+.editor-content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; display: grid; position: relative; }
+/* 页签内容动画容器：高度撑满保证脚本/文档等 100% 高度布局不变；grid-area 叠放支持切换时新旧面板交叉淡出 */
+.editor-pane { height: 100%; grid-area: 1 / 1; min-width: 0; }
 
 /* ==== 键值编辑器 ==== */
 .kv-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -432,9 +446,9 @@ body.resizing { user-select: none; cursor: col-resize; }
 }
 .meta { color: var(--text-dim); font-size: 15px; }
 .flex-spacer { flex: 1; }
-.response-content { flex: 1; overflow: hidden; }
-/* 切换缓动容器：滚动下沉到此层，保证 CodeMirror 100% 高度与长内容滚动兼容 */
-.response-pane { height: 100%; overflow: auto; }
+.response-content { flex: 1; overflow: hidden; display: grid; position: relative; }
+/* 切换缓动容器：滚动下沉到此层，保证 CodeMirror 100% 高度与长内容滚动兼容；grid-area 叠放支持交叉淡出 */
+.response-pane { height: 100%; overflow: auto; grid-area: 1 / 1; min-width: 0; }
 .response-body, .response-error {
   padding: 12px; font-family: var(--font-mono); font-size: 15px;
   line-height: 1.55; white-space: pre-wrap; word-break: break-all;
