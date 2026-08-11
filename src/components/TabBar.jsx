@@ -71,6 +71,12 @@ export default function TabBar({
     setMenu({ ...m, x: Math.min(e.clientX, window.innerWidth - 200), y: Math.min(e.clientY, window.innerHeight - 240) });
   };
 
+  // 左右三角按钮：按可视宽度的 70% 平滑滚动标签列表
+  const scrollTabs = (dir) => {
+    const el = listRef.current;
+    if (el) el.scrollBy({ left: dir * Math.max(200, el.clientWidth * 0.7), behavior: 'smooth' });
+  };
+
   const groupOf = (gid) => (groups || []).find((g) => g.id === gid) || null;
   const memberCount = (gid) => tabs.filter((t) => t.groupId === gid).length;
 
@@ -165,21 +171,33 @@ export default function TabBar({
 
   return (
     <div className="tab-bar">
+      <button
+        className={`tab-scroll-btn ${fadeL ? '' : 'is-hidden'}`}
+        title="向左滚动标签"
+        aria-label="向左滚动标签"
+        onClick={() => scrollTabs(-1)}
+      >‹</button>
       <div className="tab-list-wrap">
         {fadeL && <span className="tab-fade tab-fade-l" aria-hidden="true" />}
         <div className="tab-list" ref={listRef}>
           {items}
-          <button
-            className="tab-add"
-            title="新建标签页 (Ctrl+T 新建请求)"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setMenu({ type: 'add', x: Math.min(rect.left, window.innerWidth - 200), y: rect.bottom + 4 });
-            }}
-          >＋</button>
         </div>
         {fadeR && <span className="tab-fade tab-fade-r" aria-hidden="true" />}
       </div>
+      <button
+        className={`tab-scroll-btn ${fadeR ? '' : 'is-hidden'}`}
+        title="向右滚动标签"
+        aria-label="向右滚动标签"
+        onClick={() => scrollTabs(1)}
+      >›</button>
+      <button
+        className="tab-add"
+        title="新建标签页 (Ctrl+T 新建请求)"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setMenu({ type: 'add', x: Math.min(rect.left, window.innerWidth - 200), y: rect.bottom + 4 });
+        }}
+      >＋</button>
       {/* 标签溢出时提供全部标签下拉，快速定位被挤出可视区的标签 */}
       {overflowing && (
         <button

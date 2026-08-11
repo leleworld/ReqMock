@@ -768,6 +768,15 @@ body.resizing { user-select: none; cursor: col-resize; }
 }
 .tab-fade-l { left: 0; background: linear-gradient(to right, var(--bg-panel), transparent); }
 .tab-fade-r { right: 0; background: linear-gradient(to left, var(--bg-panel), transparent); }
+/* 左右滚动三角按钮：不可滚方向用 visibility 隐藏，占位不变避免布局跳动 */
+.tab-scroll-btn {
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 26px; margin: 0 -4px;
+  background: none; border: none; border-radius: var(--radius-s);
+  color: var(--text-dim); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.tab-scroll-btn:hover { background: var(--bg-hover); color: var(--text); }
+.tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; }
 .tab-item {
   display: flex; align-items: center; gap: 6px;
   padding: 9px 8px 9px 10px;
