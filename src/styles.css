@@ -777,11 +777,23 @@ body.resizing { user-select: none; cursor: col-resize; }
 }
 .tab-scroll-btn:hover { background: var(--bg-hover); color: var(--text); }
 .tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; }
+/* 固定区：被固定的标签/分组常驻左侧，不随滚动区挤走 */
+.tab-pinned {
+  display: flex; align-items: center; gap: 2px;
+  flex-shrink: 0; max-width: 45%;
+  overflow-x: auto; scrollbar-width: none;
+  padding-right: 8px; margin-right: 2px;
+  border-right: 1px solid var(--border);
+}
+.tab-pinned::-webkit-scrollbar { display: none; }
+.tab-pin { color: var(--accent); flex-shrink: 0; }
+.tab-pin-light { color: #fff; }
 .tab-item {
   display: flex; align-items: center; gap: 6px;
   padding: 9px 8px 9px 10px;
   min-height: 34px;
   max-width: 200px; min-width: 0;
+  flex-shrink: 0;
   border-radius: var(--radius-m) var(--radius-m) 0 0;
   cursor: pointer; user-select: none;
   color: var(--text-dim); font-size: 15px;
@@ -813,6 +825,7 @@ body.resizing { user-select: none; cursor: col-resize; }
   display: inline-flex; align-items: center; gap: 1px;
   padding: 2px 3px;
   margin: 0 2px;
+  flex-shrink: 0;
   border-radius: var(--radius-m);
   background: color-mix(in srgb, var(--group-color) 12%, transparent);
   border-bottom: 2px solid var(--group-color);

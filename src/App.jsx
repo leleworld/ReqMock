@@ -766,6 +766,11 @@ export default function App() {
 
   const handleCloseTab = (tabId, force = false) => {
     const tab = tabs.find((t) => t.id === tabId);
+    // 固定标签防误关（含固定组内成员）：需先右键取消固定
+    if (!force && tab && (tab.pinned || (tab.groupId && tabGroups.some((g) => g.id === tab.groupId && g.pinned)))) {
+      showToast('该标签已固定，右键取消固定后才能关闭', 'warn');
+      return;
+    }
     // 未保存改动二次确认，避免误关丢稿
     if (!force && isTabDirty(tab)) {
       setConfirm({
@@ -848,6 +853,16 @@ export default function App() {
     setTabGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, collapsed: !g.collapsed } : g)));
   };
 
+  /** 固定/取消固定标签：固定标签常驻标签栏左侧且防误关 */
+  const handleTogglePinTab = (tabId) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned } : t)));
+  };
+
+  /** 固定/取消固定分组：成员标签整组常驻标签栏左侧且防误关 */
+  const handleTogglePinGroup = (groupId) => {
+    setTabGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, pinned: !g.pinned } : g)));
+  };
+
   /** 解散分组但保留标签；URI 组（含手动化的）记入 dismissed，会话内不再重建 */
   const handleUngroup = (groupId) => {
     const group = tabGroups.find((g) => g.id === groupId);
@@ -859,6 +874,10 @@ export default function App() {
   /** 关闭分组内全部标签（含未保存成员时先确认） */
   const handleCloseGroup = (groupId, force = false) => {
     const group = tabGroups.find((g) => g.id === groupId);
+    if (group && group.pinned) {
+      showToast('该分组已固定，取消固定后才能关闭', 'warn');
+      return;
+    }
     const dirtyCount = tabs.filter((t) => t.groupId === groupId && isTabDirty(t)).length;
     if (!force && dirtyCount > 0) {
       setConfirm({
@@ -1564,6 +1583,8 @@ export default function App() {
           onToggleGroupCollapse={handleToggleGroupCollapse}
           onUngroup={handleUngroup}
           onCloseGroup={handleCloseGroup}
+          onTogglePinTab={handleTogglePinTab}
+          onTogglePinGroup={handleTogglePinGroup}
         />
         <div className="page-body" ref={pageScope}>
         {curTab.kind === 'request' && (

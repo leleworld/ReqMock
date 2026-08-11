@@ -20,6 +20,7 @@ import addSvg from '@jetbrains/icons/add.svg?raw';
 import eyeSvg from '@jetbrains/icons/eye.svg?raw';
 import eyeCrossedSvg from '@jetbrains/icons/eye-crossed.svg?raw';
 import trashSvg from '@jetbrains/icons/trash.svg?raw';
+import pinSvg from '@jetbrains/icons/pin-filled.svg?raw';
 
 /** 图标名 -> SVG 源码映射，新增图标时在此登记 */
 export const ICONS = {
@@ -42,7 +43,8 @@ export const ICONS = {
   add: addSvg,
   eye: eyeSvg,
   'eye-crossed': eyeCrossedSvg,
-  trash: trashSvg
+  trash: trashSvg,
+  pin: pinSvg
 };
 
 /**
