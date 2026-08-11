@@ -17,19 +17,42 @@ export default function TabBar({
 }) {
   // 右键菜单：{ type: 'tab', tabId } | { type: 'group', groupId } | { type: 'add' } | { type: 'all' }，含 x/y 弹出坐标
   const [menu, setMenu] = useState(null);
-  // 标签溢出检测：内容宽度超出可视宽度时显示「全部标签」下拉
+  // 标签溢出检测：内容宽度超出可视宽度时显示「全部标签」下拉；同时跟踪左右可滚方向用于边缘渐隐提示
   const listRef = useRef(null);
   const [overflowing, setOverflowing] = useState(false);
+  const [fadeL, setFadeL] = useState(false);
+  const [fadeR, setFadeR] = useState(false);
 
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 4);
+    const check = () => {
+      const over = el.scrollWidth > el.clientWidth + 4;
+      setOverflowing(over);
+      setFadeL(over && el.scrollLeft > 4);
+      setFadeR(over && el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    };
     check();
+    el.addEventListener('scroll', check, { passive: true });
     const ro = new ResizeObserver(check);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      el.removeEventListener('scroll', check);
+      ro.disconnect();
+    };
   }, [tabs.length]);
+
+  // 激活标签自动滚入可视区：被挤出视区时平滑滚动到位；折叠组内的激活标签回退滚到组牌
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !activeTabId) return;
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    const target = list.querySelector(`[data-tab-id="${activeTabId}"]`)
+      || (activeTab && activeTab.groupId
+        ? list.querySelector(`[data-group-id="${activeTab.groupId}"]`)
+        : null);
+    if (target) target.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+  }, [activeTabId, tabs.length]);
 
   useEffect(() => {
     if (!menu) return;
@@ -60,6 +83,7 @@ export default function TabBar({
     return (
       <div
         key={tab.id}
+        data-tab-id={tab.id}
         className={`tab-item ${active ? 'active' : ''} ${tab.groupId ? 'in-group' : ''}`}
         title={isReq ? (tab.request.url || tab.request.name) : meta.title}
         onClick={() => onSelect(tab.id)}
@@ -101,6 +125,7 @@ export default function TabBar({
     items.push(
       <motion.div
         key={'grp-' + group.id}
+        data-group-id={group.id}
         className={`tab-group ${group.collapsed ? 'collapsed' : ''}`}
         style={{ '--group-color': group.color }}
         layout
@@ -140,16 +165,20 @@ export default function TabBar({
 
   return (
     <div className="tab-bar">
-      <div className="tab-list" ref={listRef}>
-        {items}
-        <button
-          className="tab-add"
-          title="新建标签页 (Ctrl+T 新建请求)"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            setMenu({ type: 'add', x: Math.min(rect.left, window.innerWidth - 200), y: rect.bottom + 4 });
-          }}
-        >＋</button>
+      <div className="tab-list-wrap">
+        {fadeL && <span className="tab-fade tab-fade-l" aria-hidden="true" />}
+        <div className="tab-list" ref={listRef}>
+          {items}
+          <button
+            className="tab-add"
+            title="新建标签页 (Ctrl+T 新建请求)"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenu({ type: 'add', x: Math.min(rect.left, window.innerWidth - 200), y: rect.bottom + 4 });
+            }}
+          >＋</button>
+        </div>
+        {fadeR && <span className="tab-fade tab-fade-r" aria-hidden="true" />}
       </div>
       {/* 标签溢出时提供全部标签下拉，快速定位被挤出可视区的标签 */}
       {overflowing && (

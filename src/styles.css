@@ -756,10 +756,18 @@ body.resizing { user-select: none; cursor: col-resize; }
   background: var(--bg-panel); border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.tab-list-wrap { position: relative; flex: 1; min-width: 0; }
 .tab-list {
   display: flex; align-items: center; gap: 2px;
-  flex: 1; min-width: 0; overflow-x: auto;
+  width: 100%; overflow-x: auto;
 }
+/* 溢出边缘渐隐提示：仅在对应方向可滚时出现，纯提示不拦截点击 */
+.tab-fade {
+  position: absolute; top: -4px; bottom: -1px; width: 24px;
+  pointer-events: none; z-index: 3;
+}
+.tab-fade-l { left: 0; background: linear-gradient(to right, var(--bg-panel), transparent); }
+.tab-fade-r { right: 0; background: linear-gradient(to left, var(--bg-panel), transparent); }
 .tab-item {
   display: flex; align-items: center; gap: 6px;
   padding: 9px 8px 9px 10px;
