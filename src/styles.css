@@ -965,10 +965,12 @@ body.resizing { user-select: none; cursor: col-resize; }
 .code-editor .cm-editor { height: 100%; background: transparent; color: var(--text); font-size: 15px; outline: none; }
 .code-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.55; overflow: auto; }
 .code-editor .cm-gutters { background: var(--bg-panel); color: var(--text-dim); border-right: 1px solid var(--border); }
-.code-editor .cm-foldGutter { min-width: 20px; }
+.code-editor .cm-foldGutter { min-width: 14px; }
 .code-editor .cm-foldGutter .cm-gutterElement {
-  padding: 0 3px; cursor: pointer; font-size: 11px;
+  padding: 0 2px; cursor: pointer; font-size: 14px;
   display: flex; align-items: center; justify-content: center;
+  min-height: 22px; min-width: 14px; border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
 }
 .code-editor .cm-foldGutter .cm-gutterElement:hover { background: var(--bg-hover); color: var(--accent); }
 .code-editor .cm-activeLine { background: var(--bg-hover); }
