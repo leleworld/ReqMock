@@ -7,6 +7,9 @@ const vm = require('vm');
 
 const SCRIPT_TIMEOUT_MS = 1000;
 
+/** 保存对原始 JSON 的引用，防止沙箱脚本污染 */
+const nativeJSON = { parse: JSON.parse, stringify: JSON.stringify };
+
 /**
  * 执行脚本化响应。
  * @param script 用户脚本文本
@@ -16,9 +19,13 @@ const SCRIPT_TIMEOUT_MS = 1000;
 function runMockScript(script, request) {
   const response = { status: 200, headers: {}, body: '' };
   const sandbox = {
-    request: JSON.parse(JSON.stringify(request)),
+    request: nativeJSON.parse(nativeJSON.stringify(request)),
     response,
-    JSON,
+    JSON: {
+      parse: JSON.parse.bind(JSON),
+      stringify: JSON.stringify.bind(JSON),
+      keys: Object.keys
+    },
     Math,
     Date
   };

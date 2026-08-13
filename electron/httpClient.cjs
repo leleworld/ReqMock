@@ -143,6 +143,10 @@ async function sendHttpRequest(payload, signal) {
       if (!followRedirects || !isRedirect) break;
 
       curUrl = new URL(res.headers.location, curUrl);
+      // 安全检查：仅允许 http/https 协议的重定向目标
+      if (curUrl.protocol !== 'http:' && curUrl.protocol !== 'https:') {
+        throw makeError('重定向目标协议不安全: ' + curUrl.protocol, 'BAD_REDIRECT_SCHEME');
+      }
       // 303 及浏览器惯例的 301/302 非 GET → 转 GET 并丢弃 body
       if (res.status === 303 || ((res.status === 301 || res.status === 302) && curMethod !== 'GET' && curMethod !== 'HEAD')) {
         curMethod = 'GET';
@@ -244,6 +248,7 @@ function doSingleRequest(urlObj, method, headers, bodyBuffer, timeoutMs, proxy, 
           // https 目标：先 CONNECT 建隧道，再在隧道上做 TLS
           const socket = await connectTunnel(proxyUrl, urlObj.hostname, urlObj.port || 443, timeoutMs);
           tConnect = Date.now() - t0;
+          timings.dns = 0; // DNS 由代理服务器完成，本地无法测量
           options = {
             method,
             headers,

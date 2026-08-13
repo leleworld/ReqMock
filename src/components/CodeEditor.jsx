@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, placeholder as cmPlaceholder } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, placeholder as cmPlaceholder, Decoration, ViewPlugin } from '@codemirror/view';
+import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { codeFolding, foldGutter, foldKeymap, foldService, bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -56,6 +56,48 @@ const jsonBracketFold = foldService.of((state, lineStart, lineEnd) => {
   return null;
 });
 
+/** 搜索高亮装饰：普通命中 */
+const hitDeco = Decoration.mark({ class: 'cm-search-hit' });
+/** 搜索高亮装饰：当前活跃命中 */
+const activeHitDeco = Decoration.mark({ class: 'cm-search-hit-active' });
+
+/** 搜索查询状态字段：{ query: RegExp | null, activeIdx: number, positions: Array<{from:number,to:number}> | null } */
+const setSearchQueryEffect = StateEffect.define();
+const searchQueryField = StateField.define({
+  create: () => ({ query: null, activeIdx: -1, positions: null }),
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setSearchQueryEffect)) return e.value;
+    }
+    return value;
+  }
+});
+
+/** 搜索高亮 ViewPlugin：根据 searchQueryField 生成装饰 */
+const searchHighlightPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = this.buildDecorations(view);
+  }
+  update(update) {
+    if (update.docChanged || update.transactions.some((tr) => tr.effects.some((e) => e.is(setSearchQueryEffect)))) {
+      this.decorations = this.buildDecorations(update.view);
+    }
+  }
+  buildDecorations(view) {
+    const { query, activeIdx, positions } = view.state.field(searchQueryField);
+    if (!query || !positions) return Decoration.none;
+    const builder = [];
+    for (let i = 0; i < positions.length; i++) {
+      const pos = positions[i];
+      const deco = i === activeIdx ? activeHitDeco : hitDeco;
+      builder.push(deco.range(pos.from, pos.to));
+    }
+    return Decoration.set(builder, true);
+  }
+}, {
+  decorations: (v) => v.decorations
+});
+
 /** 语法高亮映射到全局 .tok-* 类，随 8 套主题的 CSS 变量自动换色 */
 const themeHighlight = HighlightStyle.define([
   { tag: tags.propertyName, class: 'tok-key' },
@@ -75,7 +117,7 @@ const themeHighlight = HighlightStyle.define([
  * @param readOnly 只读模式（响应 Pretty 视图）
  * @param lineWrap 自动换行（关闭后横向滚动）
  */
-export default function CodeEditor({ value, onChange, language = 'text', placeholder = '', readOnly = false, lineWrap = true, className = '' }) {
+export default function CodeEditor({ value, onChange, language = 'text', placeholder = '', readOnly = false, lineWrap = true, className = '', searchQuery }) {
   const hostRef = useRef(null);
   const viewRef = useRef(null);
   // 回调与初始文档走 ref，避免重建编辑器或闭包过期
@@ -93,6 +135,8 @@ export default function CodeEditor({ value, onChange, language = 'text', placeho
       search({ top: true }),
       highlightSelectionMatches(),
       syntaxHighlighting(themeHighlight),
+      searchQueryField,
+      searchHighlightPlugin,
       keymap.of([...defaultKeymap, ...foldKeymap, ...searchKeymap])
     ];
     if (language === 'json' || language === 'text') extensions.push(jsonBracketFold);
@@ -132,6 +176,40 @@ export default function CodeEditor({ value, onChange, language = 'text', placeho
       view.dispatch({ changes: { from: 0, to: cur.length, insert: value || '' } });
     }
   }, [value]);
+
+  // 外部搜索查询变化时同步到 CodeMirror 装饰，并滚动到当前命中
+  const searchQueryRef = useRef(null);
+  searchQueryRef.current = searchQuery;
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sq = searchQuery || { query: null, activeIdx: -1 };
+    // 计算匹配位置
+    let positions = null;
+    if (sq.query) {
+      positions = [];
+      const text = view.state.doc.toString();
+      const re = new RegExp(sq.query.source, sq.query.flags.includes('g') ? sq.query.flags : sq.query.flags + 'g');
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (m[0] === '') { re.lastIndex++; continue; }
+        positions.push({ from: m.index, to: m.index + m[0].length });
+        if (positions.length > 5000) break;
+      }
+    }
+    view.dispatch({ effects: setSearchQueryEffect.of({ ...sq, positions }) });
+    // 延迟滚动：等 CodeMirror 渲染完装饰后再滚动到当前命中位置
+    if (sq.activeIdx >= 0 && positions && positions[sq.activeIdx]) {
+      const pos = positions[sq.activeIdx];
+      setTimeout(() => {
+        if (viewRef.current) {
+          viewRef.current.dispatch({
+            effects: EditorView.scrollIntoView(pos.from, { y: 'center' })
+          });
+        }
+      }, 50);
+    }
+  }, [searchQuery]);
 
   return <div className={`code-editor ${className}`} ref={hostRef} />;
 }

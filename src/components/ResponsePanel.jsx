@@ -51,8 +51,6 @@ export default function ResponsePanel({
   const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
-
-  // 页签/视图切换方向：序号变大向右滑入，变小向左（渲染期间同步计算，供 AnimatePresence custom 使用）
   const paneKey = `${tab}-${view}`;
   const prevPaneKeyRef = useRef(paneKey);
   const paneDirRef = useRef(1);
@@ -164,12 +162,21 @@ export default function ResponsePanel({
   // 搜索条件变化时回到第一个命中
   useEffect(() => { setHitIdx(0); }, [query, caseSense, regexOn, view]);
 
-  // 当前命中滚动到可视区域中央
+  // Pretty 视图：将搜索查询传递给 CodeMirror 装饰系统
+  const cmSearchQuery = useMemo(() => {
+    if (!searchOpen || view !== 'pretty' || !query) return null;
+    try {
+      const src = regexOn ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return { query: new RegExp(src, caseSense ? 'g' : 'gi'), activeIdx: hitCount > 0 ? curHit : -1 };
+    } catch (_e) { return null; }
+  }, [searchOpen, view, query, caseSense, regexOn, curHit, hitCount]);
+
+  // 当前命中滚动到可视区域中央（非 Pretty 视图用 DOM scrollIntoView）
   useEffect(() => {
-    if (!contentRef.current) return;
+    if (view === 'pretty' || !contentRef.current) return;
     const el = contentRef.current.querySelector('.search-hit-active');
     if (el) el.scrollIntoView({ block: 'center' });
-  }, [curHit, searchInfo]);
+  }, [curHit, searchInfo, view]);
 
   // 打开搜索栏时聚焦输入框
   useEffect(() => {
@@ -505,7 +512,7 @@ export default function ResponsePanel({
         </div>
       )}
 
-      {tab === 'body' && searchOpen && view !== 'pretty' && (
+      {tab === 'body' && searchOpen && (
         <div className="body-search-bar">
           <input
             ref={searchInputRef}
@@ -540,13 +547,6 @@ export default function ResponsePanel({
         </div>
       )}
 
-      {tab === 'body' && searchOpen && view === 'pretty' && (
-        <div className="body-search-bar">
-          <span className="env-hint">Pretty 视图请使用 Ctrl+F 调用 CodeMirror 内置搜索（支持高亮与跳转）</span>
-          <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}><JbIcon name="close" size={12} /></button>
-        </div>
-      )}
-
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
         {/* 页签/视图切换时方向滑动交叉淡出；滚动容器下沉到 pane 层；重内容延迟一帧挂载 */}
         <AnimatePresence initial={false} custom={paneDirRef.current} mode="sync">
@@ -554,7 +554,7 @@ export default function ResponsePanel({
         {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
         {tab === 'body' && view === 'pretty' && (
           <DeferredMount>
-            <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} />
+            <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} />
           </DeferredMount>
         )}
         {tab === 'body' && view === 'raw' && (

@@ -1,0 +1,243 @@
+/* ============================================================
+ * Sidebar.module.css — 左侧导航（活动栏 + 导航面板）
+ *
+ * 对应组件：src/components/Sidebar.jsx
+ * 
+ * 类名映射（旧 → CSS Module）：
+ *   .activity-bar       → .activityBar
+ *   .activity-btn       → .activityBtn
+ *   .activity-btn.active → .activityBtn + .active
+ *   .activity-spacer    → .activitySpacer
+ *   .activity-dot       → .activityDot
+ *   .activity-badge     → .activityBadge
+ *   .side-panel         → .sidePanel
+ *   .side-panel-inner   → .sidePanelInner
+ *   .side-panel-header  → .sidePanelHeader
+ *   .side-panel-body    → .sidePanelBody
+ *   .side-panel-pane    → .sidePanelPane
+ *   .panel-resizer      → .panelResizer
+ *   .panel-collapse     → .panelCollapse
+ *   .panel-actions      → .panelActions
+ *   .panel-action       → .panelAction
+ * ============================================================ */
+
+/* ==== 活动栏（窄图标竖条） ==== */
+.activityBar {
+  width: 46px;
+  min-width: 46px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  gap: 2px;
+}
+
+.activityBtn {
+  width: 36px;
+  height: 36px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.activityBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.activityBtn.active {
+  background: var(--bg-active);
+  color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent), 0 0 10px var(--glow);
+}
+
+.activitySpacer {
+  flex: 1;
+}
+
+.activityDot {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.activityBadge {
+  position: absolute;
+  top: 1px;
+  right: -1px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==== 导航面板 ==== */
+.sidePanel {
+  width: 264px;
+  min-width: 0;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  overflow: hidden;
+}
+
+.sidePanelInner {
+  width: 264px;
+  min-width: 264px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidePanelHeader {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelCollapse {
+  margin-left: auto;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.panelCollapse:hover {
+  color: var(--text);
+}
+
+.panelActions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.panelActions ~ .panelCollapse {
+  margin-left: 4px;
+}
+
+.panelAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.panelAction:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sidePanelBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: grid;
+  position: relative;
+}
+
+.sidePanelPane {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 100%;
+}
+
+/* ==== 面板宽度拖拽手柄 ==== */
+.panelResizer {
+  width: 5px;
+  margin-left: -5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  z-index: 5;
+  transition: background 0.15s ease;
+}
+
+.panelResizer:hover,
+.panelResizer.dragging {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ==== 列表项（集合/环境/历史通用） ==== */
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.listItem:hover {
+  background: var(--bg-hover);
+}
+
+.listItem.selected {
+  background: var(--bg-active);
+}
+
+.listItem.disabled {
+  opacity: 0.45;
+}
+
+.itemName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemDelete {
+  color: var(--text-dim);
+  padding: 0 4px;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.listItem:hover .itemDelete {
+  visibility: visible;
+}
+
+.folderName {
+  color: var(--text-dim);
+  font-size: 15px;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+}
+
+.emptyHint {
+  color: var(--text-dim);
+  padding: 12px 4px;
+  font-size: 15px;
+}

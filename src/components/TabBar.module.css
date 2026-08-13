@@ -1,0 +1,231 @@
+/* ============================================================
+ * TabBar.module.css — 主区统一标签栏
+ *
+ * 对应组件：src/components/TabBar.jsx
+ *
+ * 类名映射（旧 → CSS Module）：
+ *   .tab-bar         → .tabBar
+ *   .tab-list-wrap   → .tabListWrap
+ *   .tab-list        → .tabList
+ *   .tab-fade        → .tabFade
+ *   .tab-fade-l      → .tabFadeL
+ *   .tab-fade-r      → .tabFadeR
+ *   .tab-scroll-btn  → .tabScrollBtn
+ *   .tab-pinned      → .tabPinned
+ *   .tab-pin         → .tabPin
+ *   .tab-item        → .tabItem
+ *   .tab-item.active → .tabItem + .active
+ *   .tab-name        → .tabName
+ *   .tab-icon        → .tabIcon
+ *   .tab-sending     → .tabSending
+ *   .tab-dirty       → .tabDirty
+ *   .tab-close       → .tabClose
+ *   .tab-add         → .tabAdd
+ * ============================================================ */
+
+/* ==== 标签栏容器 ==== */
+.tabBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ==== 标签列表区域 ==== */
+.tabListWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.tabList {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabList::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==== 溢出边缘渐隐 ==== */
+.tabFade {
+  position: absolute;
+  top: -4px;
+  bottom: -1px;
+  width: 24px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.tabFadeL {
+  composes: tabFade;
+  left: 0;
+  background: linear-gradient(to right, var(--bg-panel), transparent);
+}
+
+.tabFadeR {
+  composes: tabFade;
+  right: 0;
+  background: linear-gradient(to left, var(--bg-panel), transparent);
+}
+
+/* ==== 左右滚动按钮 ==== */
+.tabScrollBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 26px;
+  margin: 0 -4px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-s);
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tabScrollBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tabScrollBtn.isHidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ==== 固定区 ==== */
+.tabPinned {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-right: 8px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+}
+
+.tabPinned::-webkit-scrollbar {
+  display: none;
+}
+
+.tabPin {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ==== 标签项 ==== */
+.tabItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 8px 9px 10px;
+  min-height: 34px;
+  max-width: 200px;
+  min-width: 0;
+  flex-shrink: 0;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.tabItem:hover {
+  background: var(--bg-hover);
+}
+
+.tabItem.active {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tabName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.tabIcon {
+  color: var(--accent);
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+/* ==== 状态指示器 ==== */
+.tabSending {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent);
+  animation: tabDotPulse 1s ease-in-out infinite;
+}
+
+.tabDirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--orange);
+}
+
+@keyframes tabDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ==== 关闭按钮 ==== */
+.tabClose {
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: var(--radius-s);
+  visibility: hidden;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.tabItem:hover .tabClose,
+.tabItem.active .tabClose {
+  visibility: visible;
+}
+
+.tabClose:hover {
+  color: var(--red);
+  background: var(--bg-hover);
+}
+
+/* ==== 新建标签按钮 ==== */
+.tabAdd {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  padding: 7px 10px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tabAdd:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}

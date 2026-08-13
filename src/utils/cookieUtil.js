@@ -29,6 +29,7 @@ export function parseSetCookie(raw, requestUrl) {
     createdAt: Date.now()
   };
 
+  let hasMaxAge = false;
   for (let i = 1; i < parts.length; i++) {
     const seg = parts[i].trim();
     const eq = seg.indexOf('=');
@@ -40,11 +41,13 @@ export function parseSetCookie(raw, requestUrl) {
     } else if (key === 'path' && val) {
       cookie.path = val;
     } else if (key === 'expires' && val) {
-      const t = Date.parse(val);
-      if (!Number.isNaN(t)) cookie.expires = t;
+      if (!hasMaxAge) {
+        const t = Date.parse(val);
+        if (!Number.isNaN(t)) cookie.expires = t;
+      }
     } else if (key === 'max-age' && val !== '') {
       const sec = parseInt(val, 10);
-      if (!Number.isNaN(sec)) cookie.expires = Date.now() + sec * 1000;
+      if (!Number.isNaN(sec)) { cookie.expires = Date.now() + sec * 1000; hasMaxAge = true; }
     } else if (key === 'secure') {
       cookie.secure = true;
     }

@@ -9,9 +9,13 @@ import { executeRequest } from './requestPipeline.js';
 /** 深度优先收集节点（集合或文件夹）下所有请求，附带路径便于结果展示 */
 export function collectRunnableRequests(node, basePath = []) {
   const path = [...basePath, node.name];
-  let out = (node.requests || []).map((r) => ({ request: r, path }));
-  for (const f of node.folders || []) {
-    out = out.concat(collectRunnableRequests(f, path));
+  let out = [];
+  for (const child of node.children || []) {
+    if (child.type === 'folder' || child.type === 'collection') {
+      out = out.concat(collectRunnableRequests(child, path));
+    } else {
+      out.push({ request: child, path });
+    }
   }
   return out;
 }

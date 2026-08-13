@@ -51,7 +51,7 @@ export async function executeRequest(reqSnapshot, ctx) {
       delete envSet[k];
       if (!envUnset.includes(k)) envUnset.push(k);
     }
-    envUnset = envUnset.filter((k) => !(k in r.envSet));
+    envUnset = envUnset.filter((k) => !Object.prototype.hasOwnProperty.call(r.envSet, k));
   };
 
   // 1. 前置脚本

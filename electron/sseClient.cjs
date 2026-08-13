@@ -19,8 +19,13 @@ class SseManager {
 
   /** 建立 SSE 连接；同 id 已存在时先断开旧连接 */
   connect({ id, url, headers = [] }) {
+    return this._connect({ id, url, headers, _redirectCount: 0 });
+  }
+
+  _connect({ id, url, headers = [], _redirectCount = 0 }) {
     if (!id || !url) return { ok: false, error: '缺少连接 id 或 URL' };
-    this.close(id);
+    if (_redirectCount === 0) this.close(id);
+    if (_redirectCount > 5) { this.emit(id, 'error', 'SSE 重定向次数超过上限'); return { ok: false, error: '重定向过多' }; }
     let urlObj;
     try {
       urlObj = new URL(url);
@@ -41,6 +46,13 @@ class SseManager {
       path: urlObj.pathname + urlObj.search,
       headers: reqHeaders
     }, (res) => {
+      // 跟随 3xx 重定向
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        req.destroy();
+        this.connections.delete(id);
+        this._connect({ id, url: new URL(res.headers.location, url).toString(), headers, _redirectCount: _redirectCount + 1 });
+        return;
+      }
       if (res.statusCode !== 200) {
         this.emit(id, 'error', `服务端返回 HTTP ${res.statusCode}`);
         this.close(id);

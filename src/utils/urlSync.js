@@ -13,7 +13,7 @@ function safeDecode(s) {
 
 /** 宽松编码：仅转义会破坏 query 结构的字符，保留 {{var}} 等可读性 */
 function lightEncode(s) {
-  return String(s ?? '').replace(/[&=#+\s]/g, (c) => encodeURIComponent(c === ' ' ? ' ' : c));
+  return String(s ?? '').replace(/[&=#+%\s]/g, (c) => encodeURIComponent(c === ' ' ? ' ' : c));
 }
 
 /** 拆分 URL 为 base 与 query 字符串（不要求 URL 完整合法） */

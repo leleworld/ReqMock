@@ -23,9 +23,9 @@ class MockServer {
   start(config) {
     const { port, routes = [] } = config;
     this.routes = routes;
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       if (this.server) {
-        this.stop();
+        await this.stop();
       }
       const server = http.createServer((req, res) => this.handle(req, res));
       server.on('error', (e) => {
