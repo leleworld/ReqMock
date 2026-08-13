@@ -6,10 +6,14 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, screen } = require('el
 const path = require('path');
 const fs = require('fs');
 
-// 禁用 GPU 硬件加速：部分 Windows 环境（远程桌面/虚拟机/显卡驱动异常）GPU 进程会崩溃
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('disable-gpu');
-app.commandLine.appendSwitch('disable-software-rasterizer');
+// GPU 加速自适应：检测上次是否因 GPU 崩溃退出，是则本次禁用 GPU
+const gpuCrashFlag = path.join(app.getPath('userData'), '.gpu-crash');
+if (fs.existsSync(gpuCrashFlag)) {
+  // 上次 GPU 崩溃过，本次禁用 GPU 并清除标记（下次重新尝试）
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  try { fs.unlinkSync(gpuCrashFlag); } catch (e) { /* 忽略 */ }
+}
 
 const os = require('os');
 const { spawn } = require('child_process');
@@ -294,6 +298,13 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  // 监听 GPU 进程崩溃：写入标记文件，下次启动自动禁用 GPU
+  app.on('child-process-gone', (event, details) => {
+    if (details.type === 'GPU' || details.name === 'GPU') {
+      try { fs.writeFileSync(gpuCrashFlag, String(Date.now()), 'utf-8'); } catch (e) { /* 忽略 */ }
+    }
+  });
+
   // 应用菜单仅保留系统编辑角色（mac 另加 appMenu），菜单 UI 由渲染层自定义集成菜单栏承担；
   // 不挂 windowMenu，避免其 Ctrl+W 等加速器拦截渲染层快捷键体系
   Menu.setApplicationMenu(Menu.buildFromTemplate([
