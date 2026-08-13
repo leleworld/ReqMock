@@ -130,7 +130,7 @@ export default function CodeEditor({ value, onChange, language = 'text', placeho
     const extensions = [
       codeFolding({ placeholderText: '\u22EF' }),
       lineNumbers(),
-      foldGutter({ openText: '\u25BE', closedText: '\u25B8' }),
+      foldGutter({ openText: '\u203A', closedText: '\u203A' }),
       bracketMatching(),
       search({ top: true }),
       highlightSelectionMatches(),

@@ -965,16 +965,31 @@ body.resizing { user-select: none; cursor: col-resize; }
 .code-editor .cm-editor { height: 100%; background: transparent; color: var(--text); font-size: 15px; outline: none; }
 .code-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.55; overflow: auto; }
 .code-editor .cm-gutters { background: var(--bg-panel); color: var(--text-dim); border-right: 1px solid var(--border); }
-.code-editor .cm-foldGutter { min-width: 12px; cursor: pointer; }
+/* 折叠指示器（VS Code 风格）：默认透明，hover gutter 区域时才显示 */
+.code-editor .cm-foldGutter { min-width: 12px; }
 .code-editor .cm-foldGutter .cm-gutterElement {
-  padding: 0 2px; cursor: pointer; font-size: 12px; line-height: 1;
+  padding: 0 1px; cursor: pointer; font-size: 11px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-dim);
-  min-height: 20px; border-radius: 3px;
-  transition: background 0.12s, color 0.12s;
+  color: transparent;
+  min-height: 20px;
+  transition: color 0.1s;
+  user-select: none;
 }
+/* hover 整个 gutter 区域时显示所有折叠指示 */
+.code-editor .cm-gutters:hover .cm-foldGutter .cm-gutterElement {
+  color: var(--text-dim);
+}
+/* 鼠标直接在折叠按钮上时高亮 */
 .code-editor .cm-foldGutter .cm-gutterElement:hover {
-  background: var(--bg-hover); color: var(--accent);
+  color: var(--accent) !important;
+}
+/* 已折叠的行：始终显示指示器（旋转 90° 表示展开方向） */
+.code-editor .cm-foldGutter .cm-gutterElement[title="Unfold line"] {
+  color: var(--text) !important;
+}
+/* 展开状态旋转 90° 表示"下方可折叠" */
+.code-editor .cm-gutters:hover .cm-foldGutter .cm-gutterElement[title="Fold line"] {
+  transform: rotate(90deg);
 }
 .code-editor .cm-activeLine { background: var(--bg-hover); }
 .code-editor .cm-activeLineGutter { background: var(--bg-hover); color: var(--text); }
