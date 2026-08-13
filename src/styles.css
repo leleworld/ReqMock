@@ -965,22 +965,19 @@ body.resizing { user-select: none; cursor: col-resize; }
 .code-editor .cm-editor { height: 100%; background: transparent; color: var(--text); font-size: 15px; outline: none; }
 .code-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.55; overflow: auto; }
 .code-editor .cm-gutters { background: var(--bg-panel); color: var(--text-dim); border-right: 1px solid var(--border); }
-/* 折叠指示器（VS Code 风格）：默认隐藏，hover 显示 */
+/* 折叠指示器：始终显示，hover 高亮 */
 .code-editor .cm-foldGutter { min-width: 14px; }
 .code-editor .cm-foldGutter .cm-gutterElement {
-  padding: 0; cursor: pointer; opacity: 0;
+  padding: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: opacity 0.12s;
 }
 .code-editor .cm-foldGutter span {
   display: flex; align-items: center; justify-content: center;
-  width: 14px; height: 20px;
-  font-size: 14px; line-height: 1;
+  width: 16px; height: 20px;
+  font-size: 16px; line-height: 1;
   color: var(--text-dim);
+  transition: color 0.12s;
 }
-/* hover gutter 时所有折叠指示器显示 */
-.code-editor .cm-gutters:hover .cm-foldGutter .cm-gutterElement { opacity: 1; }
-/* hover 某一行的指示器时高亮 */
 .code-editor .cm-foldGutter .cm-gutterElement:hover span { color: var(--accent); }
 .code-editor .cm-activeLine { background: var(--bg-hover); }
 .code-editor .cm-activeLineGutter { background: var(--bg-hover); color: var(--text); }
