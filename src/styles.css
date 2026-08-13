@@ -984,8 +984,18 @@ body.resizing { user-select: none; cursor: col-resize; }
 .code-editor .cm-content { caret-color: var(--text); }
 .code-editor .cm-cursor { border-left-color: var(--text); }
 .code-editor .cm-foldPlaceholder {
-  background: none; border: none; color: var(--text-dim);
-  padding: 0; margin: 0 1px; cursor: pointer;
+  background: var(--bg-hover); border: none; color: var(--text-dim);
+  padding: 1px 6px; margin: 0 2px; cursor: pointer;
+  border-radius: 3px; font-size: 11px;
+  animation: fold-in 0.2s ease-out;
+}
+@keyframes fold-in {
+  from { opacity: 0; transform: scaleX(0.5); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+/* 折叠区域展开时行号区域闪烁提示（通过 CM6 gutter active line 高亮实现过渡） */
+.code-editor .cm-line {
+  transition: background-color 0.15s ease;
 }
 .code-editor .cm-matchingBracket { background: var(--bg-active); outline: 1px solid var(--accent); }
 .code-editor .cm-selectionMatch { background: rgba(255, 200, 60, 0.18); }
