@@ -965,14 +965,17 @@ body.resizing { user-select: none; cursor: col-resize; }
 .code-editor .cm-editor { height: 100%; background: transparent; color: var(--text); font-size: 15px; outline: none; }
 .code-editor .cm-scroller { font-family: var(--font-mono); line-height: 1.55; overflow: auto; }
 .code-editor .cm-gutters { background: var(--bg-panel); color: var(--text-dim); border-right: 1px solid var(--border); }
-.code-editor .cm-foldGutter { min-width: 14px; }
+.code-editor .cm-foldGutter { min-width: 12px; cursor: pointer; }
 .code-editor .cm-foldGutter .cm-gutterElement {
-  padding: 0 2px; cursor: pointer; font-size: 14px;
+  padding: 0 2px; cursor: pointer; font-size: 12px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  min-height: 22px; min-width: 14px; border-radius: 3px;
-  transition: background 0.15s, color 0.15s;
+  color: var(--text-dim);
+  min-height: 20px; border-radius: 3px;
+  transition: background 0.12s, color 0.12s;
 }
-.code-editor .cm-foldGutter .cm-gutterElement:hover { background: var(--bg-hover); color: var(--accent); }
+.code-editor .cm-foldGutter .cm-gutterElement:hover {
+  background: var(--bg-hover); color: var(--accent);
+}
 .code-editor .cm-activeLine { background: var(--bg-hover); }
 .code-editor .cm-activeLineGutter { background: var(--bg-hover); color: var(--text); }
 .code-editor .cm-content { caret-color: var(--text); }
