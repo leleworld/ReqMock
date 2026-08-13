@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { countRequests } from '../utils/collectionUtil.js';
+import { JbIcon } from './Icons.jsx';
 
 // 拖拽自定义 MIME：与文件拖入导入（Files）区分，仅树内请求移动响应
 const DRAG_MIME = 'application/x-reqmock-request';
@@ -7,6 +8,7 @@ const hasReqDrag = (e) => Array.from(e.dataTransfer.types || []).includes(DRAG_M
 
 /**
  * 集合树：集合 > 嵌套文件夹 > 请求，支持按关键字过滤（filter）
+ * 过滤范围：集合/文件夹名称、请求名称、请求 URL、请求方法（GET/POST 等）
  * 请求行可拖拽：拖到另一请求上插入到其前，拖到集合/文件夹行上移入末尾
  */
 export default function CollectionTree(props) {
@@ -32,12 +34,14 @@ export default function CollectionTree(props) {
   );
 }
 
-/** 节点名命中时保留整棵子树；否则递归过滤子文件夹与请求（按名称/URL），全空则剔除 */
+/** 节点名命中时保留整棵子树；否则递归过滤子文件夹与请求（按名称/URL/方法），全空则剔除 */
 function filterNode(node, q) {
   if ((node.name || '').toLowerCase().includes(q)) return node;
   const folders = (node.folders || []).map((f) => filterNode(f, q)).filter(Boolean);
   const requests = (node.requests || []).filter(
-    (r) => (r.name || '').toLowerCase().includes(q) || (r.url || '').toLowerCase().includes(q)
+    (r) => (r.name || '').toLowerCase().includes(q) ||
+           (r.url || '').toLowerCase().includes(q) ||
+           (r.method || '').toLowerCase().includes(q)
   );
   if (folders.length === 0 && requests.length === 0) return null;
   return { ...node, folders, requests };
@@ -63,15 +67,15 @@ function CollectionNode(props) {
           if (id && onMoveRequest) onMoveRequest(id, collection.id);
         }}
       >
-        <span className="tree-arrow">{isOpen ? '▾' : '▸'}</span>
+        <JbIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
         <span className="item-name" title={collection.doc || collection.name}>{collection.name}</span>
         <span className="tree-count">{countRequests(collection)}</span>
         <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
-          <span className="tree-action" title="批量运行（Collection Runner）" onClick={() => onOpenRunner(collection.id)}>▶</span>
-          <span className="tree-action" title="新建文件夹" onClick={() => onAddFolder(collection.id)}>＋</span>
-          <span className="tree-action" title="设置" onClick={() => onCollectionSettings(collection.id)}>⚙</span>
-          <span className="tree-action" title="导出该集合" onClick={() => onExportCollection(collection.id)}>↥</span>
-          <span className="tree-action tree-action-danger" title="删除集合" onClick={() => onDeleteCollection(collection.id)}>×</span>
+          <span className="tree-action" title="批量运行（Collection Runner）" onClick={() => onOpenRunner(collection.id)}><JbIcon name="play" size={14} /></span>
+          <span className="tree-action" title="新建文件夹" onClick={() => onAddFolder(collection.id)}><JbIcon name="add" size={14} /></span>
+          <span className="tree-action" title="设置" onClick={() => onCollectionSettings(collection.id)}><JbIcon name="settings" size={14} /></span>
+          <span className="tree-action" title="导出该集合" onClick={() => onExportCollection(collection.id)}><JbIcon name="export" size={14} /></span>
+          <span className="tree-action tree-action-danger" title="删除集合" onClick={() => onDeleteCollection(collection.id)}><JbIcon name="trash" size={14} /></span>
         </span>
       </div>
       {isOpen && (
@@ -104,15 +108,15 @@ function FolderNode(props) {
           if (id && onMoveRequest) onMoveRequest(id, folder.id);
         }}
       >
-        <span className="tree-arrow">{isOpen ? '▾' : '▸'}</span>
-        <span className="tree-folder-icon">🗀</span>
+        <JbIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
+        <span className="tree-folder-icon"><JbIcon name="folder" size={13} /></span>
         <span className="item-name" title={folder.name}>{folder.name}</span>
         <span className="tree-count">{countRequests(folder)}</span>
         <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
-          <span className="tree-action" title="批量运行（Collection Runner）" onClick={() => onOpenRunner(folder.id)}>▶</span>
-          <span className="tree-action" title="新建子文件夹" onClick={() => onAddFolder(folder.id)}>＋</span>
-          <span className="tree-action" title="重命名" onClick={() => onRenameNode(folder.id, folder.name)}>✎</span>
-          <span className="tree-action tree-action-danger" title="删除文件夹" onClick={() => onDeleteFolder(folder.id)}>×</span>
+          <span className="tree-action" title="批量运行（Collection Runner）" onClick={() => onOpenRunner(folder.id)}><JbIcon name="play" size={14} /></span>
+          <span className="tree-action" title="新建子文件夹" onClick={() => onAddFolder(folder.id)}><JbIcon name="add" size={14} /></span>
+          <span className="tree-action" title="重命名" onClick={() => onRenameNode(folder.id, folder.name)}><JbIcon name="pencil" size={14} /></span>
+          <span className="tree-action tree-action-danger" title="删除文件夹" onClick={() => onDeleteFolder(folder.id)}><JbIcon name="trash" size={14} /></span>
         </span>
       </div>
       {isOpen && <NodeBody {...props} node={folder} depth={depth + 1} />}
@@ -162,7 +166,7 @@ function NodeBody(props) {
               className="tree-action tree-action-danger"
               title="删除请求"
               onClick={(e) => { e.stopPropagation(); onDeleteRequest(req.id); }}
-            >×</span>
+            ><JbIcon name="trash" size={12} /></span>
           </span>
         </div>
       ))}

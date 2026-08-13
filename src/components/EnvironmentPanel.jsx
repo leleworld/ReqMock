@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JbIcon } from './Icons.jsx';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import { buildVarMap } from '../utils/envUtil.js';
 
@@ -46,7 +47,7 @@ export default function EnvironmentPanel({ environment, isActive, isGlobal, glob
     <div className="env-panel">
       <div className="env-header">
         {isGlobal ? (
-          <span className="env-name-input env-name-static">◈ 全局变量</span>
+          <span className="env-name-input env-name-static"><JbIcon name="galaxy" size={13} /> 全局变量</span>
         ) : (
           <input
             className="env-name-input"

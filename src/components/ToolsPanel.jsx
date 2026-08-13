@@ -5,13 +5,14 @@ import {
   tsToDate, dateToTs, formatDate, genUuids
 } from '../utils/toolboxUtil.js';
 import { diffLines, diffStats } from '../utils/diffUtil.js';
+import { JbIcon } from './Icons.jsx';
 
 /** 工具清单：侧栏工具箱展示，每个工具在主区以独立标签页打开 */
 export const TOOLS = [
-  { key: 'codec', label: '编解码', icon: '⇄', desc: 'Base64 / URL / JSON / Unicode' },
-  { key: 'timestamp', label: '时间戳', icon: '◷', desc: '时间戳与日期互转' },
-  { key: 'uuid', label: 'UUID', icon: '⌗', desc: '批量生成 UUID' },
-  { key: 'diff', label: 'Diff 对比', icon: '±', desc: '文本差异逐行对比' }
+  { key: 'codec', label: '编解码', icon: 'change', desc: 'Base64 / URL / JSON / Unicode' },
+  { key: 'timestamp', label: '时间戳', icon: 'time', desc: '时间戳与日期互转' },
+  { key: 'uuid', label: 'UUID', icon: 'dice', desc: '批量生成 UUID' },
+  { key: 'diff', label: 'Diff 对比', icon: 'compare', desc: '文本差异逐行对比' }
 ];
 
 const CODECS = [
@@ -225,7 +226,7 @@ export default function ToolsPanel({ tool }) {
   return (
     <div className="tools-panel">
       <div className="page-header">
-        <span className="page-header-icon">{meta.icon}</span>
+        <span className="page-header-icon"><JbIcon name={meta.icon} size={16} /></span>
         <span className="page-header-title">{meta.label}</span>
         <span className="page-header-desc">{meta.desc}</span>
       </div>

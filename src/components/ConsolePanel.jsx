@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { JbIcon } from './Icons.jsx';
 
 /**
  * 底部控制台抽屉：请求日志（可展开 Headers 详情）/ 脚本 console 输出 / Mock 命中日志
@@ -30,7 +31,7 @@ export default function ConsolePanel({
   return (
     <div className="console-drawer">
       <div className="console-head">
-        <span className="console-title">▤ 控制台</span>
+        <span className="console-title"><JbIcon name="terminal" size={13} /> 控制台</span>
         <div className="console-tabs">
           <button className={tab === 'requests' ? 'active' : ''} onClick={() => setTab('requests')}>
             请求 ({requestLogs.length})
@@ -44,7 +45,7 @@ export default function ConsolePanel({
         </div>
         <span className="flex-spacer" />
         <button className="btn-text" onClick={clearCurrent}>清空</button>
-        <button className="btn-text" title="关闭控制台" onClick={onClose}>✕</button>
+        <button className="btn-text" title="关闭控制台" onClick={onClose}><JbIcon name="close" size={12} /></button>
       </div>
 
       <div className="console-body">

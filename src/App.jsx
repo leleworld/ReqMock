@@ -13,14 +13,16 @@ import ToolsPanel, { TOOLS } from './components/ToolsPanel.jsx';
 import RunnerPanel from './components/RunnerPanel.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
 import TopBar from './components/TopBar.jsx';
+import { JbIcon } from './components/Icons.jsx';
 import UtilBar from './components/UtilBar.jsx';
 import ConsolePanel from './components/ConsolePanel.jsx';
+import WelcomePage from './components/WelcomePage.jsx';
 import { normalizeOpenedRequest } from './utils/urlSync.js';
 import { executeRequest } from './utils/requestPipeline.js';
 import EnvironmentPanel from './components/EnvironmentPanel.jsx';
 import {
   SaveRequestModal, CollectionSettingsModal, CurlImportModal,
-  CodegenModal, ExportCollectionModal, SettingsModal, PromptModal, ConfirmModal
+  CodegenModal, ExportCollectionModal, SettingsModal, PromptModal, ConfirmModal, AboutModal
 } from './components/Modals.jsx';
 import {
   newCollection, newFolder, normalizeNode, normalizeRequest,
@@ -35,6 +37,7 @@ import { toCurl } from './utils/curlUtil.js';
 import { upsertCookies, pruneCookies } from './utils/cookieUtil.js';
 import { normalizeSettings, applyTheme } from './utils/themeUtil.js';
 import { exportPostmanCollection, exportMarkdownDocs } from './utils/exportUtil.js';
+import { buildSampleWorkspace } from './utils/sampleData.js';
 
 function uuid() {
   return crypto.randomUUID();
@@ -142,6 +145,7 @@ export default function App() {
   const [consoleLogs, setConsoleLogs] = useState([]); // 控制台：请求日志（会话级）
   const [scriptLogs, setScriptLogs] = useState([]); // 控制台：脚本 console 输出（会话级）
   const [kbdOpen, setKbdOpen] = useState(false); // 状态栏快捷键速查弹层
+  const [appVersion, setAppVersion] = useState(''); // 应用版本号（主进程读取）
   const [updateProgress, setUpdateProgress] = useState(null); // 新版本下载进度百分比（null=未在下载）
   // 手动点了"检查更新"时置位：无更新/失败才弹 toast，启动静默检查不打扰
   const manualUpdateCheckRef = useRef(false);
@@ -187,28 +191,29 @@ export default function App() {
 
   /** 非请求标签的图标与名称（TabBar 用） */
   const tabMeta = (tab) => {
+    if (tab.kind === 'welcome') return { icon: 'galaxy', label: '欢迎', title: '欢迎使用 ReqMock' };
     if (tab.kind === 'env') {
-      if (tab.envId === '__globals__') return { icon: '◈', label: '全局变量', title: '全局变量' };
+      if (tab.envId === '__globals__') return { icon: 'galaxy', label: '全局变量', title: '全局变量' };
       const env = environments.find((e) => e.id === tab.envId);
-      return { icon: '◉', label: env ? env.name : '环境已删除', title: '环境变量' };
+      return { icon: 'earth', label: env ? env.name : '环境已删除', title: '环境变量' };
     }
-    if (tab.kind === 'cookies') return { icon: '◍', label: 'Cookie 管理', title: 'Cookie 管理器' };
-    if (tab.kind === 'mock') return { icon: '⇌', label: 'Mock 服务', title: 'Mock 服务面板' };
+    if (tab.kind === 'cookies') return { icon: 'archive', label: 'Cookie 管理', title: 'Cookie 管理器' };
+    if (tab.kind === 'mock') return { icon: 'services', label: 'Mock 服务', title: 'Mock 服务面板' };
     if (tab.kind === 'tool') {
       const t = TOOLS.find((x) => x.key === tab.tool);
-      return { icon: t ? t.icon : '⚒', label: t ? t.label : '工具', title: '工具箱' };
+      return { icon: t ? t.icon : 'puzzle', label: t ? t.label : '工具', title: '工具箱' };
     }
     if (tab.kind === 'runner') {
       const node = findNode(collections, tab.nodeId);
-      return { icon: '▶', label: node ? `运行 ${node.name}` : '批量运行', title: 'Collection Runner' };
+      return { icon: 'play', label: node ? `运行 ${node.name}` : '批量运行', title: 'Collection Runner' };
     }
     if (tab.kind === 'ws') {
-      return { icon: '⇄', label: (tab.config && tab.config.name) || 'WebSocket', title: 'WebSocket 连接' };
+      return { icon: 'link', label: (tab.config && tab.config.name) || 'WebSocket', title: 'WebSocket 连接' };
     }
     if (tab.kind === 'sse') {
-      return { icon: '≋', label: (tab.config && tab.config.name) || 'SSE', title: 'SSE 连接' };
+      return { icon: 'activity', label: (tab.config && tab.config.name) || 'SSE', title: 'SSE 连接' };
     }
-    return { icon: '□', label: '未知页面', title: '' };
+    return { icon: 'file', label: '未知页面', title: '' };
   };
 
   // ---- 初始加载持久化数据（含旧版数据结构迁移） ----
@@ -243,9 +248,19 @@ export default function App() {
             restored.some((t) => t.id === saved.activeTabId) ? saved.activeTabId : restored[0].id
           );
         }
+      } else {
+        // 首次启动：注入示例集合/环境并打开欢迎页，避免空白工具感
+        const sample = buildSampleWorkspace();
+        setCollections(sample.collections);
+        setEnvironments(sample.environments);
+        setActiveEnvId(sample.activeEnvId);
+        const welcomeTab = { id: uuid(), kind: 'welcome' };
+        setTabs((prev) => [welcomeTab, ...prev]);
+        setActiveTabId(welcomeTab.id);
       }
       setLoaded(true);
     });
+    if (window.api.appVersion) window.api.appVersion().then(setAppVersion);
     window.api.mockStatus().then((s) => setMockRunning(s.running));
     const unsubscribe = window.api.onMockLog((entry) => {
       setMockLogs((prev) => [entry, ...prev].slice(0, 200));
@@ -1511,6 +1526,19 @@ export default function App() {
         onNewEnv={handleNewEnv}
         onImportCurl={() => setModal({ type: 'curl' })}
         onImportFile={handleImport}
+        onExportAll={handleExportAll}
+        onBackup={handleBackupData}
+        onToggleLayout={() => handleChangeSettings({ layout: settings.layout === 'vertical' ? 'horizontal' : 'vertical' })}
+        onToggleConsole={() => setConsoleOpen((v) => !v)}
+        onToggleSidebar={() => setPanelOpen((v) => !v)}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenMock={() => openPageTab('mock')}
+        onOpenCookies={() => openPageTab('cookies')}
+        onOpenTool={(tool) => openPageTab('tool', { tool })}
+        onKbd={() => setKbdOpen(true)}
+        onOpenWelcome={() => openPageTab('welcome')}
+        onCheckUpdate={handleCheckUpdate}
+        onAbout={() => setModal({ type: 'about' })}
       />
       <div className="app-body">
       <Sidebar
@@ -1587,12 +1615,22 @@ export default function App() {
           onTogglePinGroup={handleTogglePinGroup}
         />
         <div className="page-body" ref={pageScope}>
+        {curTab.kind === 'welcome' && (
+          <WelcomePage
+            version={appVersion}
+            onNewRequest={handleNewTab}
+            onOpenPalette={() => setPaletteOpen(true)}
+            onOpenMock={() => openPageTab('mock')}
+            onKbd={() => setKbdOpen(true)}
+            onOpenAbout={() => setModal({ type: 'about' })}
+          />
+        )}
         {curTab.kind === 'request' && (
           <>
             {/* 标题行：请求名（点击重命名）+ 所属集合路径 + 保存按钮 */}
             <div className="title-row">
               <span className="req-title" title="点击重命名" onClick={handleRenameRequest}>
-                {activeRequest.name || '未命名请求'}<span className="req-title-edit">✎</span>
+                {activeRequest.name || '未命名请求'}<span className="req-title-edit"><JbIcon name="pencil" size={12} /></span>
               </span>
               {breadcrumb ? (
                 <span className="title-crumbs">
@@ -1789,20 +1827,20 @@ export default function App() {
           className={`status-item status-clickable ${mockRunning ? 'status-item-on' : ''}`}
           title={mockRunning ? `Mock 服务运行中（端口 ${mock.port}），点击打开服务面板` : 'Mock 服务未启动，点击打开服务面板'}
           onClick={() => openPageTab('mock')}
-        >{mockRunning ? `● Mock :${mock.port}` : '○ Mock 未启动'}</span>
+        ><span className={`status-dot ${mockRunning ? 'on' : ''}`} />{mockRunning ? `Mock :${mock.port}` : 'Mock 未启动'}</span>
         <span
           className={`status-item ${activeEnvId ? 'status-clickable' : ''}`}
           title="当前激活环境"
           onClick={() => activeEnvId && openPageTab('env', { envId: activeEnvId })}
-        >◉ {activeEnv ? activeEnv.name : '无环境'}</span>
+        ><JbIcon name="earth" size={12} /> {activeEnv ? activeEnv.name : '无环境'}</span>
         <span
           className={`status-item status-clickable ${consoleOpen ? 'status-item-on' : ''}`}
           title="打开/关闭控制台（请求日志 / 脚本输出 / Mock 命中）"
           onClick={() => setConsoleOpen(!consoleOpen)}
-        >▤ 控制台</span>
+        ><JbIcon name="terminal" size={12} /> 控制台</span>
         <span className="flex-spacer" />
         {updateProgress != null && (
-          <span className="status-item status-item-on" title="正在下载新版本安装包">⇣ 更新下载 {updateProgress}%</span>
+          <span className="status-item status-item-on" title="正在下载新版本安装包"><JbIcon name="update" size={12} /> 更新下载 {updateProgress}%</span>
         )}
         {curTab.kind === 'request' && curTab.sending && <span className="status-item status-item-on">发送中…</span>}
         {curTab.kind === 'request' && !curTab.sending && curTab.response && curTab.response.ok && (
@@ -1821,12 +1859,19 @@ export default function App() {
           <span className="status-item status-item-err">请求失败</span>
         )}
         <span className="status-item" title="打开的标签数">{tabs.length} 标签</span>
+        {appVersion && (
+          <span
+            className="status-item status-clickable status-version"
+            title="关于 ReqMock"
+            onClick={() => setModal({ type: 'about' })}
+          >v{appVersion}</span>
+        )}
         <span
           className="status-item status-clickable"
           title="快捷键速查"
           data-kbd-toggle
           onClick={() => setKbdOpen(!kbdOpen)}
-        >⌨</span>
+        ><JbIcon name="quick-guide" size={12} /></span>
       </div>
 
       <AnimatePresence>
@@ -1892,6 +1937,13 @@ export default function App() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal && modal.type === 'about' && (
+        <AboutModal
+          version={appVersion}
+          onCheckUpdate={handleCheckUpdate}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal && modal.type === 'exportCol' && (() => {
         const col = collections.find((c) => c.id === modal.colId);
         return col ? (
@@ -1931,7 +1983,7 @@ export default function App() {
             <span>通知中心</span>
             <span className="notice-actions">
               <button className="btn-text" onClick={() => { setNotices([]); setNoticeUnread(0); }}>清空</button>
-              <button className="btn-text" onClick={() => setNoticesOpen(false)}>✕</button>
+              <button className="btn-text" onClick={() => setNoticesOpen(false)}><JbIcon name="close" size={12} /></button>
             </span>
             </div>
             <div className="notice-list">
@@ -1951,7 +2003,7 @@ export default function App() {
         {toast && (
           <motion.div className={`toast toast-${toast.type}`} {...toastSlide}>
             <span className="toast-icon">
-              {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : toast.type === 'warn' ? '!' : 'ℹ'}
+              <JbIcon name={toast.type === 'success' ? 'checkmark' : toast.type === 'error' ? 'close' : toast.type === 'warn' ? 'warning' : 'info'} size={14} />
             </span>
             {toast.text}
           </motion.div>

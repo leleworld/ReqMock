@@ -45,6 +45,21 @@ export default function TabBar({
     };
   }, [tabs.length]);
 
+  // 鼠标滚轮横向滚动：纵向滚轮映射为标签列表横向滚动（无可横向空间时放行，避免拦截页面滚动）
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (el.scrollWidth <= el.clientWidth + 4) return;
+      const delta = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (Math.abs(delta) < 1) return;
+      e.preventDefault();
+      el.scrollLeft += delta;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   // 激活标签自动滚入可视区：被挤出视区时平滑滚动到位；折叠组内的激活标签回退滚到组牌
   useEffect(() => {
     const list = listRef.current;
@@ -104,17 +119,17 @@ export default function TabBar({
         {isReq ? (
           <span className={`method method-${tab.request.method}`}>{tab.request.method}</span>
         ) : (
-          <span className="tab-icon">{meta.icon}</span>
+          <JbIcon name={meta.icon} size={14} className="tab-icon" />
         )}
         <span className="tab-name">{isReq ? (tab.request.name || '未命名请求') : meta.label}</span>
-        {isReq && tab.sending && <span className="tab-sending" title="发送中">●</span>}
-        {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)">●</span>}
+        {isReq && tab.sending && <span className="tab-sending" title="发送中" />}
+        {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" />}
         {!pinned && (
           <span
             className="tab-close"
             title="关闭标签页 (Ctrl+W)"
             onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}
-          >×</span>
+          ><JbIcon name="close" size={12} /></span>
         )}
       </div>
     );
@@ -153,7 +168,7 @@ export default function TabBar({
             onClick={() => onToggleGroupCollapse(group.id)}
             onContextMenu={(e) => openMenu(e, { type: 'group', groupId: group.id })}
           >
-            <span className="tab-group-caret">{group.collapsed ? '▸' : '▾'}</span>
+            <JbIcon name={group.collapsed ? 'chevron-right' : 'chevron-down'} size={12} className="tab-group-caret" />
             {group.pinned && <JbIcon name="pin" size={11} className="tab-pin tab-pin-light" />}
             <span className="tab-group-name">{group.name}</span>
             <span className="tab-group-count">{members.length}</span>
@@ -197,7 +212,7 @@ export default function TabBar({
         title="向左滚动标签"
         aria-label="向左滚动标签"
         onClick={() => scrollTabs(-1)}
-      >‹</button>
+      ><JbIcon name="chevron-left" size={14} /></button>
       <div className="tab-list-wrap">
         {fadeL && <span className="tab-fade tab-fade-l" aria-hidden="true" />}
         <div className="tab-list" ref={listRef}>
@@ -210,7 +225,7 @@ export default function TabBar({
         title="向右滚动标签"
         aria-label="向右滚动标签"
         onClick={() => scrollTabs(1)}
-      >›</button>
+      ><JbIcon name="chevron-right" size={14} /></button>
       <button
         className="tab-add"
         title="新建标签页 (Ctrl+T 新建请求)"
@@ -218,7 +233,7 @@ export default function TabBar({
           const rect = e.currentTarget.getBoundingClientRect();
           setMenu({ type: 'add', x: Math.min(rect.left, window.innerWidth - 200), y: rect.bottom + 4 });
         }}
-      >＋</button>
+      ><JbIcon name="add" size={14} /></button>
       {/* 标签溢出时提供全部标签下拉，快速定位被挤出可视区的标签 */}
       {overflowing && (
         <button
@@ -228,7 +243,9 @@ export default function TabBar({
             const rect = e.currentTarget.getBoundingClientRect();
             setMenu({ type: 'all', x: Math.min(rect.left, window.innerWidth - 240), y: rect.bottom + 4 });
           }}
-        >▾</button>
+        >
+          <JbIcon name="chevron-down" size={14} />
+        </button>
       )}
 
       {menu && menu.type === 'add' && (
@@ -253,7 +270,7 @@ export default function TabBar({
               >
                 {isReq
                   ? <span className={`method method-${t.request.method}`}>{t.request.method}</span>
-                  : <span className="tab-icon">{meta.icon}</span>}
+                  : <JbIcon name={meta.icon} size={14} className="tab-icon" />}
                 <span className="ctx-label">{isReq ? (t.request.name || '未命名请求') : meta.label}</span>
                 {g && <span className="ctx-dot" style={{ background: g.color }} title={`分组「${g.name}」`} />}
               </div>

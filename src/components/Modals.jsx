@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { JbIcon } from './Icons.jsx';
 import { maskFade, modalPop } from '../utils/motionPresets.js';
 import KeyValueEditor, { rowsToBulkText, bulkTextToRows } from './KeyValueEditor.jsx';
 import { newPresetId } from '../utils/headerPresets.js';
@@ -124,7 +125,7 @@ export function CollectionSettingsModal({ collection, onConfirm, onClose }) {
           公共 Headers{headers.filter((h) => h.key).length > 0 && ` (${headers.filter((h) => h.key).length})`}
         </button>
         <button className={tab === 'auth' ? 'active' : ''} onClick={() => setTab('auth')}>
-          授权{auth.type !== 'none' && ' ●'}
+          授权{auth.type !== 'none' && <span className="dot-indicator" />}
         </button>
         <button className={tab === 'doc' ? 'active' : ''} onClick={() => setTab('doc')}>文档</button>
       </div>
@@ -284,7 +285,7 @@ export function CodegenModal({ request, onClose }) {
         <select className="modal-input codegen-lang" value={lang} onChange={(e) => setLang(e.target.value)}>
           {CODEGEN_LANGS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
         </select>
-        <button className="btn-secondary" onClick={handleCopy}>{copied ? '已复制 ✓' : '复制代码'}</button>
+        <button className="btn-secondary" onClick={handleCopy}>{copied ? <><JbIcon name="checkmark" size={12} /> 已复制</> : '复制代码'}</button>
       </div>
       <pre className="codegen-code">{code}</pre>
       <div className="env-hint">已应用环境变量替换与授权配置；参数表中启用的行已合并到 URL</div>
@@ -472,6 +473,28 @@ export function HeaderPresetsModal({ presets, onChangePresets, onClose }) {
             >{selected ? '保存修改' : '添加预设'}</button>
           </div>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * 关于对话框：品牌露出 + 版本号 + 检查更新
+ */
+export function AboutModal({ version, onCheckUpdate, onClose }) {
+  return (
+    <Modal title="关于 ReqMock" onClose={onClose} width={400}>
+      <div className="about-modal-body">
+        <div className="about-modal-logo"><JbIcon name="galaxy" size={40} /></div>
+        <div className="about-modal-name">ReqMock</div>
+        <div className="about-modal-version">版本 {version || '0.0.0'}</div>
+        <div className="about-modal-desc">API 调试与 Mock 一体化工作台：请求编排、环境管理、脚本断言、实时连接与本地 Mock 服务。</div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={onClose}>关闭</button>
+        <button className="btn-primary" onClick={() => { onCheckUpdate(); onClose(); }}>
+          <JbIcon name="update" size={14} /> 检查更新
+        </button>
       </div>
     </Modal>
   );

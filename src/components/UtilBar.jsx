@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JbIcon } from './Icons.jsx';
 
 /**
  * 右侧上下文工具条（Apifox/IDEA 式竖条）：
@@ -31,7 +32,7 @@ export default function UtilBar({
               <div className="util-drawer-head">
                 <span>{drawer === 'doc' ? '接口文档' : '变量预览'}</span>
                 <span className="flex-spacer" />
-                <button className="btn-text" onClick={() => setDrawer(null)}>✕</button>
+                <button className="btn-text" onClick={() => setDrawer(null)}><JbIcon name="close" size={12} /></button>
               </div>
               {drawer === 'doc' && (
                 isRequestTab && request ? (
@@ -96,7 +97,7 @@ export default function UtilBar({
           title="激活环境变量预览"
           onClick={() => toggle('vars')}
         >
-          <span className="util-icon">◈</span>
+          <span className="util-icon"><JbIcon name="galaxy" size={14} /></span>
           <span className="util-label">变量</span>
         </button>
       </div>

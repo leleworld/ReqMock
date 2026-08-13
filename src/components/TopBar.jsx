@@ -1,17 +1,81 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { popoverRise } from '../utils/motionPresets.js';
+import { JbIcon } from './Icons.jsx';
+import { TOOLS } from './ToolsPanel.jsx';
 
 /**
- * 顶部全局栏：Logo + ＋新建统一入口（请求/WS/SSE/Mock路由/环境/导入）+ 全局环境切换器
- * 环境切换器全局可见：带环境警示色点，悬停展示变量快速预览，Ctrl+E 循环切换
+ * 顶部集成菜单栏（软件壳）：Logo + 应用菜单（文件/编辑/视图/工具/帮助）+ 右侧快捷动作（＋新建 / 环境切换器）
+ * 菜单即功能索引：所有核心动作都能从菜单发现，快捷键以 kbd 提示展示
+ * 编辑菜单经主进程 webContents 执行，保证与系统一致的复制/粘贴/撤销行为
  */
-export default function TopBar({
-  environments, activeEnvId, globals = [], onActivateEnv, onOpenGlobals, onManageEnvs,
-  onNewRequest, onNewWs, onNewSse, onNewMockRoute, onNewEnv,
-  onImportCurl, onImportFile
-}) {
-  // 当前展开的下拉菜单：'new' | 'env' | null
+
+/** 菜单模型：sep 分隔线；kbd 快捷键提示；icon 为 JetBrains 图标名 */
+function buildMenus(handlers) {
+  return [
+    {
+      key: 'file', label: '文件', items: [
+        { label: '新建 HTTP 请求', kbd: 'Ctrl+T', onClick: handlers.onNewRequest },
+        { label: '新建 WebSocket 连接', onClick: handlers.onNewWs },
+        { label: '新建 SSE 连接', onClick: handlers.onNewSse },
+        { label: '新建 Mock 路由', onClick: handlers.onNewMockRoute },
+        { label: '新建环境', onClick: handlers.onNewEnv },
+        { sep: true },
+        { label: '导入 cURL / 报文…', onClick: handlers.onImportCurl },
+        { label: '导入文件…', onClick: handlers.onImportFile },
+        { label: '导出工作区…', onClick: handlers.onExportAll },
+        { label: '备份数据…', onClick: handlers.onBackup },
+        { sep: true },
+        { label: '新建窗口', kbd: 'Ctrl+Shift+N', onClick: () => window.api.newWindow() }
+      ]
+    },
+    {
+      key: 'edit', label: '编辑', items: [
+        { label: '撤销', kbd: 'Ctrl+Z', onClick: () => window.api.editExec('undo') },
+        { label: '重做', kbd: 'Ctrl+Y', onClick: () => window.api.editExec('redo') },
+        { sep: true },
+        { label: '剪切', kbd: 'Ctrl+X', onClick: () => window.api.editExec('cut') },
+        { label: '复制', kbd: 'Ctrl+C', onClick: () => window.api.editExec('copy') },
+        { label: '粘贴', kbd: 'Ctrl+V', onClick: () => window.api.editExec('paste') },
+        { label: '全选', kbd: 'Ctrl+A', onClick: () => window.api.editExec('selectAll') }
+      ]
+    },
+    {
+      key: 'view', label: '视图', items: [
+        { label: '切换请求/响应布局', onClick: handlers.onToggleLayout },
+        { label: '切换控制台', onClick: handlers.onToggleConsole },
+        { label: '切换侧栏', kbd: 'Ctrl+B', onClick: handlers.onToggleSidebar },
+        { label: '命令面板', kbd: 'Ctrl+K', onClick: handlers.onOpenPalette },
+        { sep: true },
+        { label: '开发者工具', onClick: () => window.api.toggleDevtools() }
+      ]
+    },
+    {
+      key: 'tools', label: '工具', items: [
+        { label: 'Mock 服务面板', icon: 'services', onClick: handlers.onOpenMock },
+        { label: 'Cookie 管理器', icon: 'archive', onClick: handlers.onOpenCookies },
+        { sep: true },
+        ...TOOLS.map((t) => ({ label: t.label, icon: t.icon, onClick: () => handlers.onOpenTool(t.key) }))
+      ]
+    },
+    {
+      key: 'help', label: '帮助', items: [
+        { label: '快捷键速查', kbd: 'Ctrl+/', onClick: handlers.onKbd },
+        { label: '欢迎与入门', onClick: handlers.onOpenWelcome },
+        { sep: true },
+        { label: '检查更新…', icon: 'update', onClick: handlers.onCheckUpdate },
+        { label: '关于 ReqMock', icon: 'info', onClick: handlers.onAbout }
+      ]
+    }
+  ];
+}
+
+export default function TopBar(props) {
+  const {
+    environments, activeEnvId, globals = [], onActivateEnv, onOpenGlobals, onManageEnvs,
+    onNewRequest, onNewWs, onNewSse, onNewMockRoute, onNewEnv, onImportCurl, onImportFile
+  } = props;
+  // 当前展开的下拉菜单：菜单 key | 'new' | 'env' | null
   const [menu, setMenu] = useState(null);
   // 环境变量快速预览（悬停延时展示，菜单展开时不叠加）
   const [envPreview, setEnvPreview] = useState(false);
@@ -38,7 +102,7 @@ export default function TopBar({
 
   const activeEnv = environments.find((e) => e.id === activeEnvId) || null;
   /** 菜单项点击：先收起菜单再执行动作 */
-  const pick = (fn) => () => { setMenu(null); fn(); };
+  const pick = (fn) => () => { setMenu(null); fn && fn(); };
 
   // 预览内容：激活环境变量（同名覆盖全局）+ 全局变量，最多展示 12 条
   const envVars = activeEnv ? (activeEnv.variables || []).filter((v) => v.key) : [];
@@ -59,9 +123,42 @@ export default function TopBar({
     setEnvPreview(false);
   };
 
+  const menus = buildMenus(props);
+
   return (
     <div className="top-bar">
       <span className="top-logo">ReqMock</span>
+
+      {/* 应用菜单：文件 / 编辑 / 视图 / 工具 / 帮助 */}
+      <nav className="top-menubar" aria-label="应用菜单">
+        {menus.map((m) => (
+          <span key={m.key} className="top-menu-anchor">
+            <button
+              className={`top-menu-btn ${menu === m.key ? 'open' : ''}`}
+              data-topbar-toggle
+              onClick={() => setMenu(menu === m.key ? null : m.key)}
+              onMouseEnter={() => { if (menu && menu !== m.key) setMenu(m.key); }}
+            >{m.label}</button>
+            <AnimatePresence>
+              {menu === m.key && (
+                <motion.div className="ctx-menu topbar-menu" {...popoverRise}>
+                  {m.items.map((it, i) => (
+                    it.sep ? <div key={i} className="ctx-sep" /> : (
+                      <div key={i} className="ctx-item" onClick={pick(it.onClick)}>
+                        {it.icon && <JbIcon name={it.icon} size={14} className="ctx-icon" />}
+                        <span className="ctx-label">{it.label}</span>
+                        {it.kbd && <span className="ctx-kbd">{it.kbd}</span>}
+                      </div>
+                    )
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </span>
+        ))}
+      </nav>
+
+      <span className="flex-spacer" />
 
       <span className="top-menu-anchor">
         <button
@@ -69,10 +166,10 @@ export default function TopBar({
           data-topbar-toggle
           title="新建请求 / 连接 / Mock 路由 / 环境"
           onClick={() => setMenu(menu === 'new' ? null : 'new')}
-        >＋ 新建 <span className="caret">▾</span></button>
+        ><JbIcon name="add" size={13} /> 新建 <JbIcon name="caret-down" size={10} className="caret-icon" /></button>
         <AnimatePresence>
           {menu === 'new' && (
-            <motion.div className="ctx-menu topbar-menu" {...popoverRise}>
+            <motion.div className="ctx-menu topbar-menu topbar-menu-right" {...popoverRise}>
               <div className="ctx-item" onClick={pick(onNewRequest)}>HTTP 请求<span className="ctx-kbd">Ctrl+T</span></div>
               <div className="ctx-item" onClick={pick(onNewWs)}>WebSocket 连接</div>
               <div className="ctx-item" onClick={pick(onNewSse)}>SSE 连接</div>
@@ -86,8 +183,6 @@ export default function TopBar({
         </AnimatePresence>
       </span>
 
-      <span className="flex-spacer" />
-
       <span className="top-menu-anchor" onMouseEnter={startPreview} onMouseLeave={stopPreview}>
         <button
           className={`env-switcher ${activeEnv ? 'on' : ''}`}
@@ -97,7 +192,7 @@ export default function TopBar({
           onClick={() => { stopPreview(); setMenu(menu === 'env' ? null : 'env'); }}
         >
           <span className="env-color-dot" style={{ background: activeEnv && activeEnv.color ? activeEnv.color : 'currentColor' }} />
-          {activeEnv ? activeEnv.name : '无环境'} <span className="caret">▾</span>
+          {activeEnv ? activeEnv.name : '无环境'} <JbIcon name="caret-down" size={10} className="caret-icon" />
         </button>
         {envPreview && !menu && (
           <div className="ctx-menu topbar-menu topbar-menu-right env-preview-pop">
@@ -107,7 +202,7 @@ export default function TopBar({
             {previewVars.length === 0 && <div className="empty-hint">暂无可用变量</div>}
             {previewVars.slice(0, 12).map((v) => (
               <div key={v.scope + ':' + v.key} className="env-preview-row" title={`${v.key} = ${v.value}`}>
-                <span className="env-preview-scope">{v.scope === 'env' ? '◉' : '◈'}</span>
+                <span className="env-preview-scope"><JbIcon name={v.scope === 'env' ? 'earth' : 'galaxy'} size={12} /></span>
                 <span className="env-preview-key">{v.key}</span>
                 <span className="env-preview-val">{v.secret ? '••••••' : String(v.value ?? '')}</span>
               </div>
@@ -119,11 +214,11 @@ export default function TopBar({
           {menu === 'env' && (
             <motion.div className="ctx-menu topbar-menu topbar-menu-right" {...popoverRise}>
               <div className="ctx-item" onClick={pick(() => onActivateEnv(null))}>
-                <span className="ctx-check">{!activeEnvId ? '✓' : ''}</span>无环境
+                <span className="ctx-check">{!activeEnvId ? <JbIcon name="checkmark" size={12} /> : ''}</span>无环境
               </div>
               {environments.map((env) => (
                 <div key={env.id} className="ctx-item" onClick={pick(() => onActivateEnv(env.id))}>
-                  <span className="ctx-check">{env.id === activeEnvId ? '✓' : ''}</span>
+                  <span className="ctx-check">{env.id === activeEnvId ? <JbIcon name="checkmark" size={12} /> : ''}</span>
                   {env.color && <span className="ctx-dot" style={{ background: env.color }} />}
                   <span className="ctx-label">{env.name}</span>
                   <span className="ctx-kbd">{(env.variables || []).filter((v) => v.key).length}</span>
@@ -133,8 +228,8 @@ export default function TopBar({
                 <div className="ctx-item" onClick={pick(onNewEnv)}>＋ 新建环境…</div>
               )}
               <div className="ctx-sep" />
-              <div className="ctx-item" onClick={pick(onOpenGlobals)}>◈ 全局变量</div>
-              <div className="ctx-item" onClick={pick(onManageEnvs)}>✎ 管理环境…</div>
+              <div className="ctx-item" onClick={pick(onOpenGlobals)}><JbIcon name="galaxy" size={14} className="ctx-icon" />全局变量</div>
+              <div className="ctx-item" onClick={pick(onManageEnvs)}><JbIcon name="pencil" size={14} className="ctx-icon" />管理环境…</div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -163,7 +163,7 @@ export default function Sidebar(props) {
                   <JbIcon name="search" size={13} />
                   <input
                     className="tree-search"
-                    placeholder="搜索集合 / 请求…"
+                    placeholder="搜索集合 / 请求 / 方法…"
                     value={colFilter}
                     onChange={(e) => setColFilter(e.target.value)}
                   />
@@ -189,7 +189,7 @@ export default function Sidebar(props) {
                   onClick={() => onOpenEnv('__globals__')}
                   title="全局变量对所有环境生效，同名时被环境变量覆盖"
                 >
-                  <span className="env-dot env-dot-global">◈</span>
+                  <span className="env-dot env-dot-global"><JbIcon name="galaxy" size={12} /></span>
                   <span className="item-name">全局变量</span>
                   <span className="tree-count">{(props.globals || []).filter((v) => v.key).length}</span>
                 </div>
@@ -200,7 +200,7 @@ export default function Sidebar(props) {
                     className={`list-item ${env.id === openEnvId ? 'selected' : ''}`}
                     onClick={() => onOpenEnv(env.id)}
                   >
-                    <span className={`env-dot ${env.id === activeEnvId ? 'env-dot-active' : ''}`}>◉</span>
+                    <span className={`env-dot ${env.id === activeEnvId ? 'env-dot-active' : ''}`}><JbIcon name="earth" size={12} /></span>
                     <span className="item-name">{env.name}</span>
                     <span className="tree-count">{(env.variables || []).filter((v) => v.key).length}</span>
                   </div>
@@ -239,7 +239,7 @@ export default function Sidebar(props) {
                 {cookieDomains.length === 0 && <div className="empty-hint">暂无 Cookie（发送请求后自动记录 Set-Cookie）</div>}
                 {cookieDomains.map((d) => (
                   <div key={d.domain} className="list-item" onClick={onOpenCookies}>
-                    <span className="env-dot">◍</span>
+                    <span className="env-dot"><JbIcon name="archive" size={12} /></span>
                     <span className="item-name" title={d.domain}>{d.domain}</span>
                     <span className="tree-count">{d.count}</span>
                   </div>
@@ -265,7 +265,7 @@ export default function Sidebar(props) {
                     className={`list-item tool-list-item ${openTool === t.key ? 'selected' : ''}`}
                     onClick={() => onOpenTool(t.key)}
                   >
-                    <span className="tool-item-icon">{t.icon}</span>
+                    <span className="tool-item-icon"><JbIcon name={t.icon} size={14} /></span>
                     <span className="tool-item-text">
                       <span className="item-name">{t.label}</span>
                       <span className="tool-item-desc">{t.desc}</span>
@@ -343,7 +343,7 @@ function HistoryPane({ history, onOpen, onDelete, onClear, onCopyCurl }) {
             title={g.domain}
             onClick={() => setCollapsed((prev) => ({ ...prev, [g.domain]: !prev[g.domain] }))}
           >
-            <span className="tree-arrow">{collapsed[g.domain] ? '▸' : '▾'}</span>
+            <span className="tree-arrow"><JbIcon name={collapsed[g.domain] ? 'chevron-right' : 'chevron-down'} size={12} /></span>
             <span className="item-name">{g.domain}</span>
             <span className="tree-count">{g.items.length}</span>
           </div>

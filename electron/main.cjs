@@ -2,7 +2,7 @@
  * ReqMock 主进程入口
  * 职责：窗口管理、IPC 注册（请求发送 / Mock 服务 / 持久化）
  */
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -33,10 +33,44 @@ function getStartupBackground() {
   return '#1e1f22';
 }
 
+/* 窗口状态持久化：记住位置/尺寸/最大化，重启后恢复（软件级窗口记忆） */
+function windowStateFile() {
+  return path.join(app.getPath('userData'), 'reqmock-window.json');
+}
+
+function loadWindowState() {
+  try {
+    const raw = fs.readFileSync(windowStateFile(), 'utf-8');
+    const st = JSON.parse(raw);
+    if (!st || typeof st.width !== 'number' || typeof st.height !== 'number') return null;
+    // 校验窗口至少部分落在某个显示器工作区内，避免外接屏拔掉后窗口跑到屏外
+    const visible = screen.getAllDisplays().some((d) => {
+      const a = d.workArea;
+      return st.x != null && st.y != null &&
+        st.x < a.x + a.width && st.x + st.width > a.x &&
+        st.y < a.y + a.height && st.y + st.height > a.y;
+    });
+    return { ...st, visible };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    if (!win || win.isDestroyed()) return;
+    const st = { maximized: win.isMaximized() };
+    if (!st.maximized) Object.assign(st, win.getBounds());
+    fs.writeFileSync(windowStateFile(), JSON.stringify(st), 'utf-8');
+  } catch (e) { /* 窗口状态保存失败不影响主流程 */ }
+}
+
 function createWindow() {
+  const winState = loadWindowState();
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    ...(winState && winState.visible
+      ? { x: winState.x, y: winState.y, width: winState.width, height: winState.height }
+      : { width: 1440, height: 900 }),
     minWidth: 1024,
     minHeight: 640,
     title: 'ReqMock',
@@ -49,6 +83,24 @@ function createWindow() {
     }
   });
   win.setMenuBarVisibility(false);
+  if (winState && winState.maximized) win.maximize();
+  win.on('close', () => saveWindowState(win));
+  // 输入框右键编辑菜单：修复无应用菜单时输入框无法右键粘贴/复制的问题
+  win.webContents.on('context-menu', (e, params) => {
+    const f = params.editFlags || {};
+    const tpl = [
+      { role: 'undo', enabled: !!f.canUndo },
+      { role: 'redo', enabled: !!f.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: !!f.canCut },
+      { role: 'copy', enabled: !!f.canCopy },
+      { role: 'paste', enabled: !!f.canPaste },
+      { role: 'delete', enabled: params.editable },
+      { type: 'separator' },
+      { role: 'selectAll' }
+    ];
+    Menu.buildFromTemplate(tpl).popup({ window: win });
+  });
   // 渲染层的 target=_blank 链接（如关于里的 GitHub）交给系统浏览器打开
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
@@ -183,6 +235,21 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // ---- 应用信息 / 编辑命令 / 开发者工具（自定义菜单栏用） ----
+  ipcMain.handle('app:version', async () => app.getVersion());
+  ipcMain.handle('edit:exec', async (event, command) => {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    const wc = win && !win.isDestroyed() ? win.webContents : null;
+    if (!wc || typeof wc[command] !== 'function') return { ok: false };
+    wc[command]();
+    return { ok: true };
+  });
+  ipcMain.handle('window:devtools', async () => {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    if (win && !win.isDestroyed()) win.webContents.toggleDevTools();
+    return { ok: true };
+  });
+
   // ---- 脚本外部编辑：写临时文件用 VSCode 打开，监听保存后回传渲染进程 ----
   const scriptWatchers = new Map(); // token -> 临时文件路径
   ipcMain.handle('script:openExternal', async (event, { name, content }) => {
@@ -221,8 +288,12 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
-  // 移除默认应用菜单，避免其快捷键（如 Ctrl+W 关闭窗口）拦截渲染进程的快捷键体系
-  Menu.setApplicationMenu(null);
+  // 应用菜单仅保留系统编辑角色（mac 另加 appMenu），菜单 UI 由渲染层自定义集成菜单栏承担；
+  // 不挂 windowMenu，避免其 Ctrl+W 等加速器拦截渲染层快捷键体系
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { role: 'editMenu' }
+  ]));
   store = new Store(path.join(app.getPath('userData'), 'reqmock-store.json'));
   mockServer = new MockServer((logEntry) => {
     if (mainWindow && !mainWindow.isDestroyed()) {

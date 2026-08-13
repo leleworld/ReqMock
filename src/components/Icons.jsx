@@ -21,6 +21,34 @@ import eyeSvg from '@jetbrains/icons/eye.svg?raw';
 import eyeCrossedSvg from '@jetbrains/icons/eye-crossed.svg?raw';
 import trashSvg from '@jetbrains/icons/trash.svg?raw';
 import pinSvg from '@jetbrains/icons/pin-filled.svg?raw';
+import earthSvg from '@jetbrains/icons/earth.svg?raw';
+import galaxySvg from '@jetbrains/icons/galaxy.svg?raw';
+import archiveSvg from '@jetbrains/icons/archive.svg?raw';
+import servicesSvg from '@jetbrains/icons/services.svg?raw';
+import puzzleSvg from '@jetbrains/icons/puzzle.svg?raw';
+import playSvg from '@jetbrains/icons/play.svg?raw';
+import stopSvg from '@jetbrains/icons/stop.svg?raw';
+import linkSvg from '@jetbrains/icons/link.svg?raw';
+import activitySvg from '@jetbrains/icons/activity.svg?raw';
+import terminalSvg from '@jetbrains/icons/terminal.svg?raw';
+import quickGuideSvg from '@jetbrains/icons/quick-guide.svg?raw';
+import checkmarkSvg from '@jetbrains/icons/checkmark.svg?raw';
+import closeSvg from '@jetbrains/icons/close.svg?raw';
+import warningSvg from '@jetbrains/icons/warning.svg?raw';
+import infoSvg from '@jetbrains/icons/info.svg?raw';
+import pencilSvg from '@jetbrains/icons/pencil.svg?raw';
+import caretDownSvg from '@jetbrains/icons/caret-down.svg?raw';
+import updateSvg from '@jetbrains/icons/update.svg?raw';
+import changeSvg from '@jetbrains/icons/change.svg?raw';
+import fileSvg from '@jetbrains/icons/file.svg?raw';
+import chevronDownSvg from '@jetbrains/icons/chevron-down.svg?raw';
+import chevronRightSvg from '@jetbrains/icons/chevron-right.svg?raw';
+import chevronLeftSvg from '@jetbrains/icons/chevron-left.svg?raw';
+import timeSvg from '@jetbrains/icons/time.svg?raw';
+import diceSvg from '@jetbrains/icons/dice.svg?raw';
+import compareSvg from '@jetbrains/icons/compare.svg?raw';
+import lockSvg from '@jetbrains/icons/lock.svg?raw';
+import collapseSvg from '@jetbrains/icons/collapse.svg?raw';
 
 /** 图标名 -> SVG 源码映射，新增图标时在此登记 */
 export const ICONS = {
@@ -44,7 +72,35 @@ export const ICONS = {
   eye: eyeSvg,
   'eye-crossed': eyeCrossedSvg,
   trash: trashSvg,
-  pin: pinSvg
+  pin: pinSvg,
+  earth: earthSvg,
+  galaxy: galaxySvg,
+  archive: archiveSvg,
+  services: servicesSvg,
+  puzzle: puzzleSvg,
+  play: playSvg,
+  stop: stopSvg,
+  link: linkSvg,
+  activity: activitySvg,
+  terminal: terminalSvg,
+  'quick-guide': quickGuideSvg,
+  checkmark: checkmarkSvg,
+  close: closeSvg,
+  warning: warningSvg,
+  info: infoSvg,
+  pencil: pencilSvg,
+  'caret-down': caretDownSvg,
+  update: updateSvg,
+  change: changeSvg,
+  file: fileSvg,
+  'chevron-down': chevronDownSvg,
+  'chevron-right': chevronRightSvg,
+  'chevron-left': chevronLeftSvg,
+  time: timeSvg,
+  dice: diceSvg,
+  compare: compareSvg,
+  lock: lockSvg,
+  collapse: collapseSvg
 };
 
 /**

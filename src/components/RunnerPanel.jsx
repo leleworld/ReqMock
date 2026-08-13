@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { collectRunnableRequests, parseRunnerData, runCollection, exportRunReport } from '../utils/runnerUtil.js';
 import { findNode } from '../utils/collectionUtil.js';
+import { JbIcon } from './Icons.jsx';
 
 /**
  * Collection Runner 面板：
@@ -152,9 +153,9 @@ export default function RunnerPanel(props) {
 
         <div className="runner-actions">
           {!running ? (
-            <button className="btn-primary" onClick={handleRun}>▶ 运行</button>
+            <button className="btn-primary" onClick={handleRun}><JbIcon name="play" size={13} /> 运行</button>
           ) : (
-            <button className="btn-danger" onClick={handleStop}>■ 停止</button>
+            <button className="btn-danger" onClick={handleStop}><JbIcon name="stop" size={13} /> 停止</button>
           )}
           {summary && !running && (
             <button className="btn-secondary" onClick={handleExport}>导出报告</button>
@@ -211,7 +212,7 @@ function RunEntry({ entry }) {
     <div className={`runner-entry ${entry.passed ? '' : 'runner-entry-failed'}`}>
       <div className="runner-entry-row" onClick={() => hasDetail && setOpen(!open)}>
         <span className={`runner-badge ${entry.passed ? 'runner-badge-ok' : 'runner-badge-bad'}`}>
-          {entry.passed ? '✓' : '✗'}
+          {entry.passed ? <JbIcon name="checkmark" size={11} /> : <JbIcon name="close" size={11} />}
         </span>
         <span className="meta">#{entry.iteration}</span>
         <span className={`method method-${entry.method}`}>{entry.method}</span>
@@ -229,7 +230,7 @@ function RunEntry({ entry }) {
           {entry.error && <div className="runner-detail-line runner-detail-err">网络错误：{entry.error}</div>}
           {entry.tests.map((t, i) => (
             <div key={i} className={`runner-detail-line ${t.passed ? 'runner-detail-ok' : 'runner-detail-err'}`}>
-              {t.passed ? '✓' : '✗'} {t.name}{t.error ? `：${t.error}` : ''}
+              {t.passed ? <JbIcon name="checkmark" size={11} /> : <JbIcon name="close" size={11} />} {t.name}{t.error ? `：${t.error}` : ''}
             </div>
           ))}
           {entry.scriptErrors.map((s, i) => (

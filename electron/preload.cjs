@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld('api', {
   // 选择本地文件（multipart 上传）与新建窗口
   pickFile: () => ipcRenderer.invoke('file:pick'),
   newWindow: () => ipcRenderer.invoke('window:new'),
+
+  // 应用信息 / 编辑命令 / 开发者工具（自定义菜单栏用）
+  appVersion: () => ipcRenderer.invoke('app:version'),
+  editExec: (command) => {
+    const allowed = ['undo', 'redo', 'cut', 'copy', 'paste', 'delete', 'selectAll'];
+    if (!allowed.includes(command)) return Promise.resolve({ ok: false });
+    return ipcRenderer.invoke('edit:exec', command);
+  },
+  toggleDevtools: () => ipcRenderer.invoke('window:devtools'),
   onMockLog: (callback) => {
     const listener = (event, entry) => callback(entry);
     ipcRenderer.on('mock:log', listener);

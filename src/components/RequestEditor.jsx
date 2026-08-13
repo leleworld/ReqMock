@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { JbIcon } from './Icons.jsx';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import VarInput from './VarInput.jsx';
 import CodeEditor from './CodeEditor.jsx';
@@ -228,7 +229,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     ? [{
         key: authPreview.key,
         value: authPreview.value,
-        mark: effectiveAuth === inheritedAuth ? '⬇' : '🔒',
+        mark: effectiveAuth === inheritedAuth ? 'import' : 'lock',
         hint: effectiveAuth === inheritedAuth
           ? `继承自集合「${ownerCollection.name}」的授权，发送时自动附加`
           : '锁定：按「授权」页签配置自动生成，手动填写同名 Header 时以手动值为准'
@@ -240,7 +241,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     ...inheritedHeaders.map((h) => ({
       key: h.key,
       value: resolveVars(h.value, varMap),
-      mark: '⬇',
+      mark: 'import',
       hint: `继承自集合「${ownerCollection.name}」的公共 Headers，请求内同名 Header 优先`
     })),
     ...authRows,
@@ -260,7 +261,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
           const rect = e.currentTarget.getBoundingClientRect();
           setPresetMenu({ top: rect.bottom + 4, left: rect.left });
         }}
-      >预设 ▾</button>
+      >预设 <JbIcon name="caret-down" size={10} className="caret-icon" /></button>
       {presetMenu && (
         <div className="ctx-menu hp-menu" style={{ top: presetMenu.top, left: presetMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
           {headerPresets.map((p) => (
@@ -286,12 +287,12 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       <div className="editor-tabs">
         {[
           ['params', `Params${request.params.filter(p => p.key).length > 0 ? ` (${request.params.filter(p => p.key).length})` : ''}`],
-          ['body', `Body${request.bodyType !== 'none' ? ' ●' : ''}`],
+          ['body', <>Body{request.bodyType !== 'none' && <span className="dot-indicator" />}</>],
           ['headers', `Headers${request.headers.filter(h => h.key).length > 0 ? ` (${request.headers.filter(h => h.key).length})` : ''}`],
-          ['auth', `授权${auth.type !== 'none' ? ' ●' : ''}`],
-          ['script', `脚本${(request.preScript || request.postScript) ? ' ●' : ''}`],
-          ['settings', `设置${settingsCount > 0 ? ' ●' : ''}`],
-          ['doc', `文档${request.doc ? ' ●' : ''}`],
+          ['auth', <>授权{auth.type !== 'none' && <span className="dot-indicator" />}</>],
+          ['script', <>脚本{(request.preScript || request.postScript) && <span className="dot-indicator" />}</>],
+          ['settings', <>设置{settingsCount > 0 && <span className="dot-indicator" />}</>],
+          ['doc', <>文档{request.doc && <span className="dot-indicator" />}</>],
           ['examples', `示例${(request.examples || []).length > 0 ? ` (${request.examples.length})` : ''}`]
         ].map(([key, label]) => (
           <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
@@ -456,7 +457,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               <div className="script-title">
                 前置脚本（发送前执行，可修改 rm.request / 写环境变量）
                 <button className="btn-text script-ext-btn" title="写入临时文件并用 VSCode 打开，保存后自动同步回此处" onClick={() => openExternal('preScript')}>
-                  {Object.values(extEditing).includes('preScript') ? '● 外部编辑中' : 'VSCode 编辑'}
+                  {Object.values(extEditing).includes('preScript') ? <><span className="dot-indicator on" /> 外部编辑中</> : 'VSCode 编辑'}
                 </button>
               </div>
               <CodeEditor
@@ -471,7 +472,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               <div className="script-title">
                 后置脚本（响应后执行，可断言测试 / 提取变量）
                 <button className="btn-text script-ext-btn" title="写入临时文件并用 VSCode 打开，保存后自动同步回此处" onClick={() => openExternal('postScript')}>
-                  {Object.values(extEditing).includes('postScript') ? '● 外部编辑中' : 'VSCode 编辑'}
+                  {Object.values(extEditing).includes('postScript') ? <><span className="dot-indicator on" /> 外部编辑中</> : 'VSCode 编辑'}
                 </button>
               </div>
               <CodeEditor

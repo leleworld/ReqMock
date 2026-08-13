@@ -92,7 +92,7 @@ export default function KeyValueEditor({
           >{'{}'}</button>
         )}
         <button className="icon-btn" title="复制全部为文本" disabled={!hasContent} onClick={copyAll}>
-          {copied ? <span className="kv-copied">✓</span> : <JbIcon name="copy" size={14} />}
+          {copied ? <span className="kv-copied"><JbIcon name="checkmark" size={12} /></span> : <JbIcon name="copy" size={14} />}
         </button>
         {!bulk && (
           <button className="icon-btn" title="新增一行" onClick={add}>
@@ -136,7 +136,7 @@ export default function KeyValueEditor({
                     <input type="checkbox" checked disabled />
                     <span className="kv-locked-key">
                       {row.key}
-                      <span className="kv-lock-icon" aria-hidden="true">{row.mark || '🔒'}</span>
+                      <span className="kv-lock-icon" aria-hidden="true">{row.mark ? <JbIcon name={row.mark} size={12} /> : <JbIcon name="lock" size={12} />}</span>
                     </span>
                     {row.value
                       ? <span className="kv-locked-value">{row.value}</span>

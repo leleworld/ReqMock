@@ -249,7 +249,7 @@ export default function ResponsePanel({
               className="ctx-item"
               onClick={() => { setHistOpen(false); onSelectHistory && onSelectHistory(h); }}
             >
-              <span className="ctx-check">{response === h.response ? '✓' : ''}</span>
+              <span className="ctx-check">{response === h.response ? <JbIcon name="checkmark" size={12} /> : ''}</span>
               {h.response.ok ? (
                 <span className={`status-tag ${h.response.status < 400 ? 'status-good' : 'status-bad'}`}>{h.response.status}</span>
               ) : (
@@ -288,7 +288,7 @@ export default function ResponsePanel({
         <div className="response-corner">{cornerActions}</div>
         <div className="response-placeholder">
           <div className="empty-hero">
-            <span className="empty-hero-icon" aria-hidden="true">▶</span>
+            <span className="empty-hero-icon" aria-hidden="true"><JbIcon name="play" size={22} /></span>
             <div className="empty-hero-title">发送请求后在此查看响应</div>
             <div className="empty-hero-keys">
               <span className="kbd-chip">Ctrl + Enter</span> 发送
@@ -465,7 +465,7 @@ export default function ResponsePanel({
         )}
         {hasScriptInfo && (
           <button className={tab === 'tests' ? 'active' : ''} onClick={() => setTab('tests')}>
-            测试 {testCount > 0 && (testFailed > 0 ? `(${testCount - testFailed}/${testCount}✗)` : `(${testCount}✓)`)}
+            测试 {testCount > 0 && (testFailed > 0 ? `(${testCount - testFailed}/${testCount} 通过)` : `(${testCount} 通过)`)}
             {tab === 'tests' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}
@@ -505,7 +505,7 @@ export default function ResponsePanel({
         </div>
       )}
 
-      {tab === 'body' && searchOpen && (
+      {tab === 'body' && searchOpen && view !== 'pretty' && (
         <div className="body-search-bar">
           <input
             ref={searchInputRef}
@@ -535,8 +535,15 @@ export default function ResponsePanel({
           </span>
           <button className="search-toggle" title="上一个 (Shift+Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx - 1)}>↑</button>
           <button className="search-toggle" title="下一个 (Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx + 1)}>↓</button>
-          <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}>✕</button>
+          <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}><JbIcon name="close" size={12} /></button>
           {(view === 'tree' || view === 'hex') && <span className="env-hint">搜索仅在 Pretty / Raw 视图生效</span>}
+        </div>
+      )}
+
+      {tab === 'body' && searchOpen && view === 'pretty' && (
+        <div className="body-search-bar">
+          <span className="env-hint">Pretty 视图请使用 Ctrl+F 调用 CodeMirror 内置搜索（支持高亮与跳转）</span>
+          <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}><JbIcon name="close" size={12} /></button>
         </div>
       )}
 
@@ -600,7 +607,7 @@ export default function ResponsePanel({
         <div className="decode-tip" style={{ left: decodeTip.x, top: decodeTip.y }}>
           <div className="decode-tip-title">
             {decodeTip.kind === 'jwt' ? 'JWT 解码' : 'Base64 解码'}
-            <span className="decode-tip-close" onClick={() => setDecodeTip(null)}>✕</span>
+            <span className="decode-tip-close" onClick={() => setDecodeTip(null)}><JbIcon name="close" size={12} /></span>
           </div>
           <pre className="decode-tip-body">{decodeTip.text}</pre>
         </div>
@@ -645,7 +652,7 @@ function FailureView({ response, scriptResult, historyBtn, layoutBtn, onRetry, o
       <div className="fail-view">
         <div className="fail-card">
           <div className="fail-title">
-            <span className="fail-icon">⚠</span>
+            <span className="fail-icon"><JbIcon name="warning" size={20} /></span>
             <span>{explain.title}</span>
           </div>
           <div className="fail-raw-row">
@@ -872,7 +879,7 @@ function JsonTree({ data, onExtractVariable, onToast }) {
           }
           return (
             <div key={row.path} className="jt-row jt-clickable" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onClick={() => toggle(row.path)} onContextMenu={(e) => openMenu(e, row.path)}>
-              <span className="jt-toggle">{row.expanded ? '▾' : '▸'}</span>
+              <span className="jt-toggle"><JbIcon name={row.expanded ? 'chevron-down' : 'chevron-right'} size={11} /></span>
               {row.name !== undefined && (
                 <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
               )}
@@ -1073,7 +1080,7 @@ function ScriptResultView({ result }) {
         <div className="test-list">
           {tests.map((t, i) => (
             <div key={i} className={`test-item ${t.passed ? 'test-pass' : 'test-fail'}`}>
-              <span>{t.passed ? '✓' : '✗'}</span>
+              <span>{t.passed ? <JbIcon name="checkmark" size={12} /> : <JbIcon name="close" size={12} />}</span>
               <span>{t.name}</span>
               {!t.passed && t.error && <span className="test-error-msg">— {t.error}</span>}
             </div>

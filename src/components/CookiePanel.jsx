@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { JbIcon } from './Icons.jsx';
 import { formatDate } from '../utils/toolboxUtil.js';
 
 /**
@@ -77,7 +78,7 @@ export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggle
               className="history-group-head cookie-group-head"
               onClick={() => setCollapsed((prev) => ({ ...prev, [g.domain]: !prev[g.domain] }))}
             >
-              <span className="tree-arrow">{collapsed[g.domain] ? '▸' : '▾'}</span>
+              <span className="tree-arrow"><JbIcon name={collapsed[g.domain] ? 'chevron-right' : 'chevron-down'} size={12} /></span>
               <span className="item-name">{g.domain}</span>
               <span className="tree-count">{g.items.length}</span>
               <span className="flex-spacer" />
@@ -103,7 +104,7 @@ export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggle
                       <td className="header-value">
                         <input className="cookie-cell-input" value={c.value} onChange={(e) => update(c, 'value', e.target.value)} />
                       </td>
-                      <td>{c.path}{c.secure ? ' 🔒' : ''}</td>
+                      <td>{c.path}{c.secure && <span className="kv-lock-icon" title="Secure Cookie"> <JbIcon name="lock" size={11} /></span>}</td>
                       <td className="meta">{c.expires === null ? '会话' : formatDate(new Date(c.expires))}</td>
                       <td>
                         <span className="item-delete cookie-delete" onClick={() => removeAt(c)}>×</span>
