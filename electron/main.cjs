@@ -5,6 +5,10 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// 禁用 GPU 硬件加速：部分 Windows 环境（远程桌面/虚拟机/显卡驱动异常）GPU 进程会崩溃
+app.disableHardwareAcceleration();
+
 const os = require('os');
 const { spawn } = require('child_process');
 const { sendHttpRequest } = require('./httpClient.cjs');
