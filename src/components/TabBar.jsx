@@ -14,7 +14,7 @@ import { JbIcon } from './Icons.jsx';
 export default function TabBar({
   tabs, groups, activeTabId, tabMeta, isTabDirty,
   onSelect, onClose, onNew, onNewWs, onNewSse,
-  onNewGroup, onAssignGroup, onLeaveGroup,
+  onNewGroup, onAssignGroup, onLeaveGroup, onCloseAll, onCloseToRight, onCloseToLeft,
   onRenameGroup, onRecolorGroup, onToggleGroupCollapse, onUngroup, onCloseGroup,
   onTogglePinTab, onTogglePinGroup
 }) {
@@ -302,6 +302,10 @@ export default function TabBar({
           )}
           <div className="ctx-sep" />
           <div className="ctx-item ctx-danger" onClick={() => { onClose(menuTab.id); setMenu(null); }}>关闭标签页</div>
+          <div className="ctx-item ctx-danger" onClick={() => { onCloseToRight(menuTab.id); setMenu(null); }}>关闭右侧所有标签</div>
+          <div className="ctx-item ctx-danger" onClick={() => { onCloseToLeft(menuTab.id); setMenu(null); }}>关闭左侧所有标签</div>
+          <div className="ctx-sep" />
+          <div className="ctx-item ctx-danger" onClick={() => { onCloseAll(); setMenu(null); }}>关闭所有标签</div>
         </div>
       )}
 

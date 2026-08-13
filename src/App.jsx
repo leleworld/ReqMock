@@ -812,6 +812,51 @@ export default function App() {
     }
   };
 
+  /** 关闭所有标签（保留一个空白标签） */
+  const handleCloseAll = () => {
+    const dirty = tabs.filter((t) => t.kind === 'request' && isTabDirty(t));
+    if (dirty.length > 0) {
+      setConfirm({
+        title: '关闭所有标签',
+        message: `有 ${dirty.length} 个标签包含未保存的修改，关闭后将丢失，确定全部关闭？`,
+        danger: true,
+        onConfirm: () => {
+          tabs.forEach((t) => closeRealtime(t));
+          const tab = createTab(newRequest());
+          setTabs([tab]);
+          setActiveTabId(tab.id);
+        }
+      });
+      return;
+    }
+    tabs.forEach((t) => closeRealtime(t));
+    const tab = createTab(newRequest());
+    setTabs([tab]);
+    setActiveTabId(tab.id);
+  };
+
+  /** 关闭右侧所有标签 */
+  const handleCloseToRight = (tabId) => {
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    if (idx < 0 || idx >= tabs.length - 1) return;
+    const toClose = tabs.slice(idx + 1);
+    toClose.forEach((t) => closeRealtime(t));
+    const next = tabs.slice(0, idx + 1);
+    setTabs(next);
+    if (!next.find((t) => t.id === activeTabId)) setActiveTabId(next[next.length - 1].id);
+  };
+
+  /** 关闭左侧所有标签 */
+  const handleCloseToLeft = (tabId) => {
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    if (idx <= 0) return;
+    const toClose = tabs.slice(0, idx);
+    toClose.forEach((t) => closeRealtime(t));
+    const next = tabs.slice(idx);
+    setTabs(next);
+    if (!next.find((t) => t.id === activeTabId)) setActiveTabId(next[0].id);
+  };
+
   // ---- 标签分组操作（Chrome 式） ----
   /** 把标签加入新建的手动分组 */
   const handleNewGroup = (tabId) => {
@@ -1606,6 +1651,9 @@ export default function App() {
           onNewGroup={handleNewGroup}
           onAssignGroup={handleAssignGroup}
           onLeaveGroup={handleLeaveGroup}
+          onCloseAll={handleCloseAll}
+          onCloseToRight={handleCloseToRight}
+          onCloseToLeft={handleCloseToLeft}
           onRenameGroup={handleRenameGroup}
           onRecolorGroup={handleRecolorGroup}
           onToggleGroupCollapse={handleToggleGroupCollapse}
