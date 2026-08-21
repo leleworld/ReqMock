@@ -34,8 +34,9 @@
     },
     "publish": [
       {
-        "provider": "generic",
-        "url": "https://YOUR-UPDATE-SERVER.example.com/reqmock/updates"
+        "provider": "github",
+        "owner": "leleworld",
+        "repo": "ReqMock"
       }
     ],
     "win": {
