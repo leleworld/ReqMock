@@ -324,10 +324,11 @@ export function ExportCollectionModal({ collection, onConfirm, onClose }) {
 export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheckUpdate, onClose }) {
   const [tab, setTab] = useState('appearance');
   const TABS = [
-    { key: 'appearance', label: '外观', icon: '🎨' },
-    { key: 'editor', label: '编辑器', icon: '✏️' },
-    { key: 'data', label: '数据', icon: '💾' },
-    { key: 'about', label: '关于', icon: 'ℹ️' },
+    { key: 'appearance', label: '外观', icon: 'theme' },
+    { key: 'editor', label: '编辑器', icon: 'pencil' },
+    { key: 'network', label: '网络', icon: 'cloud' },
+    { key: 'data', label: '数据', icon: 'archive' },
+    { key: 'about', label: '关于', icon: 'info' },
   ];
   return (
     <motion.div className="modal-mask" onClick={onClose} {...maskFade}>
@@ -340,7 +341,7 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
           <nav className="settings-nav">
             {TABS.map((t) => (
               <button key={t.key} className={`settings-nav-item ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
-                <span className="settings-nav-icon">{t.icon}</span>
+                <JbIcon name={t.icon} size={15} />
                 <span>{t.label}</span>
               </button>
             ))}
@@ -388,15 +389,20 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
                     </button>
                   ))}
                 </div>
-                <div className="settings-section-title">Cookie 管理</div>
-                <label className="inline-label">
-                  <input
-                    type="checkbox"
-                    checked={settings.cookiesEnabled}
-                    onChange={(e) => onChange({ cookiesEnabled: e.target.checked })}
-                  />
-                  自动记录 Set-Cookie 并在发送时附加匹配 Cookie
-                </label>
+                <div className="settings-section-title">字体大小</div>
+                <div className="settings-stepper">
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ fontSize: Math.max(12, (settings.fontSize || 14) - 1) })}>−</button>
+                  <span className="stepper-value">{settings.fontSize || 14}px</span>
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ fontSize: Math.min(20, (settings.fontSize || 14) + 1) })}>+</button>
+                </div>
+                <div className="settings-section-title">Tab 缩进</div>
+                <div className="seg-group">
+                  <button className={`seg-btn ${(settings.tabSize || 2) === 2 ? 'active' : ''}`} onClick={() => onChange({ tabSize: 2 })}>2 空格</button>
+                  <button className={`seg-btn ${settings.tabSize === 4 ? 'active' : ''}`} onClick={() => onChange({ tabSize: 4 })}>4 空格</button>
+                </div>
+                <div className="settings-section-title">编辑器选项</div>
+                <label className="inline-label"><input type="checkbox" checked={settings.wordWrap || false} onChange={(e) => onChange({ wordWrap: e.target.checked })} />自动换行</label>
+                <label className="inline-label"><input type="checkbox" checked={settings.lineNumbers !== false} onChange={(e) => onChange({ lineNumbers: e.target.checked })} />显示行号</label>
                 <div className="settings-section-title">快捷键</div>
                 <div className="shortcut-table">
                   <div className="shortcut-row"><span>发送请求</span><kbd>Shift+F10</kbd></div>
@@ -413,6 +419,26 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
                 </div>
               </>
             )}
+            {tab === 'network' && (
+              <>
+                <div className="settings-section-title">请求超时（秒）</div>
+                <div className="settings-stepper">
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ timeout: Math.max(5, (settings.timeout || 30) - 5) })}>−</button>
+                  <span className="stepper-value">{settings.timeout || 30}s</span>
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ timeout: Math.min(300, (settings.timeout || 30) + 5) })}>+</button>
+                </div>
+                <div className="settings-section-title">最大重定向次数</div>
+                <div className="settings-stepper">
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ maxRedirects: Math.max(0, (settings.maxRedirects || 5) - 1) })}>−</button>
+                  <span className="stepper-value">{settings.maxRedirects ?? 5}</span>
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ maxRedirects: Math.min(20, (settings.maxRedirects || 5) + 1) })}>+</button>
+                </div>
+                <div className="settings-section-title">安全</div>
+                <label className="inline-label"><input type="checkbox" checked={settings.sslVerify !== false} onChange={(e) => onChange({ sslVerify: e.target.checked })} />验证 SSL 证书</label>
+                <div className="settings-section-title">Cookie</div>
+                <label className="inline-label"><input type="checkbox" checked={settings.cookiesEnabled !== false} onChange={(e) => onChange({ cookiesEnabled: e.target.checked })} />自动记录 Set-Cookie 并附加匹配 Cookie</label>
+              </>
+            )}
             {tab === 'data' && (
               <>
                 <div className="settings-section-title">备份与恢复</div>
@@ -423,6 +449,13 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
                   </div>
                   <div className="settings-backup-hint">备份包含集合 / 环境 / 全局变量 / 历史 / Mock / Cookie / 设置；恢复将覆盖当前数据</div>
                 </div>
+                <div className="settings-section-title">历史记录上限</div>
+                <div className="settings-stepper">
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ historyLimit: Math.max(50, (settings.historyLimit || 200) - 50) })}>−</button>
+                  <span className="stepper-value">{settings.historyLimit || 200} 条</span>
+                  <button className="btn-secondary btn-sm" onClick={() => onChange({ historyLimit: Math.min(1000, (settings.historyLimit || 200) + 50) })}>+</button>
+                </div>
+                <div className="settings-backup-hint">超出上限时自动删除最早的记录</div>
               </>
             )}
             {tab === 'about' && (

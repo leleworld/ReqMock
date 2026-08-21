@@ -2807,7 +2807,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 .about-update-btn { margin-left: auto; flex-shrink: 0; font-size: 15px; }
 
 /* ===== Settings Modal: Left-Nav Layout ===== */
-.settings-modal { width: 600px; max-height: 80vh; display: flex; flex-direction: column; }
+.settings-modal { width: 600px; height: 480px; display: flex; flex-direction: column; }
 .settings-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
 .settings-nav {
@@ -2873,6 +2873,23 @@ body.resizing { user-select: none; cursor: col-resize; }
   font-size: 13px; color: var(--accent); text-decoration: none;
 }
 .about-links .about-link:hover { text-decoration: underline; }
+
+/* Stepper control */
+.settings-stepper {
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.settings-stepper .btn-sm {
+  width: 28px; height: 28px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600; border-radius: var(--radius-s);
+}
+.stepper-value {
+  min-width: 50px; text-align: center;
+  font-size: 14px; font-weight: 500; color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.inline-label + .inline-label { margin-top: 6px; }
 
 
 

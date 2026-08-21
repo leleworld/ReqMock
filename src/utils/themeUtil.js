@@ -45,6 +45,17 @@ export function normalizeSettings(s) {
     accent: ACCENTS.some((a) => a.value === settings.accent) ? settings.accent : 'blue',
     layout: LAYOUTS.some((l) => l.value === settings.layout) ? settings.layout : 'vertical',
     cookiesEnabled: settings.cookiesEnabled !== false,
+    // 编辑器
+    fontSize: clampNum(settings.fontSize, 12, 20, 14),
+    tabSize: [2, 4, 8].includes(settings.tabSize) ? settings.tabSize : 2,
+    wordWrap: settings.wordWrap === true,
+    lineNumbers: settings.lineNumbers !== false,
+    // 网络
+    timeout: clampNum(settings.timeout, 5, 300, 30),
+    maxRedirects: clampNum(settings.maxRedirects, 0, 20, 5),
+    sslVerify: settings.sslVerify !== false,
+    // 数据
+    historyLimit: clampNum(settings.historyLimit, 50, 1000, 200),
     // 可拖拽布局：侧栏宽度 / 请求响应分栏比例（上下布局取高度%，左右布局取宽度%）
     sidebarWidth: clampNum(settings.sidebarWidth, 200, 420, 264),
     splitV: clampNum(settings.splitV, 25, 75, 45),
