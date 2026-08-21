@@ -355,7 +355,6 @@ export default function ResponsePanel({
             </div>
           </div>
         </div>
-      </div>
     );
   }
   if (!response.ok) {
