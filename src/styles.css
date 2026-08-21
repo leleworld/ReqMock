@@ -2806,6 +2806,74 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .about-update-btn { margin-left: auto; flex-shrink: 0; font-size: 15px; }
 
+/* ===== Settings Modal: Left-Nav Layout ===== */
+.settings-modal { width: 600px; max-height: 80vh; display: flex; flex-direction: column; }
+.settings-layout { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+.settings-nav {
+  width: 130px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar, var(--bg-secondary));
+}
+.settings-nav-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--radius-m);
+  border: none; background: transparent;
+  color: var(--text-dim); font-size: 13px;
+  cursor: pointer; text-align: left; transition: all 0.15s;
+}
+.settings-nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.settings-nav-item.active { background: var(--accent-bg, color-mix(in srgb, var(--accent) 15%, transparent)); color: var(--accent); font-weight: 600; }
+.settings-nav-icon { font-size: 15px; width: 20px; text-align: center; }
+
+.settings-content {
+  flex: 1; min-width: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.settings-section-title {
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  color: var(--text-dim); margin: 16px 0 8px; letter-spacing: 0.5px;
+}
+.settings-section-title:first-child { margin-top: 0; }
+
+.seg-group-wrap { flex-wrap: wrap; }
+
+/* Shortcut table */
+.shortcut-table { display: flex; flex-direction: column; gap: 4px; }
+.shortcut-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 8px; border-radius: var(--radius-s);
+  font-size: 13px;
+}
+.shortcut-row:nth-child(odd) { background: var(--bg-hover, rgba(255,255,255,0.03)); }
+.shortcut-row span { color: var(--text); }
+.shortcut-row kbd {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 2px 6px; border-radius: 3px;
+  background: var(--bg-tertiary, rgba(255,255,255,0.08));
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+/* About v2 */
+.about-block-v2 {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; border-radius: var(--radius-m);
+  background: var(--bg-hover, rgba(255,255,255,0.03));
+}
+
+.about-links {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.about-links .about-link {
+  font-size: 13px; color: var(--accent); text-decoration: none;
+}
+.about-links .about-link:hover { text-decoration: underline; }
+
 
 
 /* ==== 全局变量 ==== */

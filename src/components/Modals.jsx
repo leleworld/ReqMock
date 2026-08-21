@@ -319,87 +319,134 @@ export function ExportCollectionModal({ collection, onConfirm, onClose }) {
 }
 
 /**
- * 应用设置：主题 / 强调色 / 请求响应布局 / Cookie 自动管理开关 / 数据备份
+ * 应用设置：左侧标签页导航（外观 / 编辑器 / 数据 / 关于）
  */
 export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheckUpdate, onClose }) {
+  const [tab, setTab] = useState('appearance');
+  const TABS = [
+    { key: 'appearance', label: '外观', icon: '🎨' },
+    { key: 'editor', label: '编辑器', icon: '✏️' },
+    { key: 'data', label: '数据', icon: '💾' },
+    { key: 'about', label: '关于', icon: 'ℹ️' },
+  ];
   return (
-    <Modal title="设置" onClose={onClose} width={440}>
-      <div className="settings-row">
-        <span className="settings-label">外观主题</span>
-        <div className="seg-group">
-          {THEMES.map((t) => (
-            <button
-              key={t.value}
-              className={`seg-btn ${settings.theme === t.value ? 'active' : ''}`}
-              onClick={() => onChange({ theme: t.value })}
-            >
-              {t.dark ? '☾' : '☀'} {t.label}
-            </button>
-          ))}
+    <motion.div className="modal-mask" onClick={onClose} {...maskFade}>
+      <motion.div className="modal settings-modal" onClick={(e) => e.stopPropagation()} {...modalPop}>
+        <div className="modal-header">
+          <span>设置</span>
+          <span className="item-delete" onClick={onClose}>×</span>
         </div>
-      </div>
-      <div className="settings-row">
-        <span className="settings-label">强调色</span>
-        <span className="accent-picker">
-          {ACCENTS.map((a) => (
-            <span
-              key={a.value}
-              className={`accent-dot ${settings.accent === a.value ? 'active' : ''}`}
-              style={{ background: a.color }}
-              title={a.label}
-              onClick={() => onChange({ accent: a.value })}
-            />
-          ))}
-        </span>
-      </div>
-      <div className="settings-row">
-        <span className="settings-label">请求响应布局</span>
-        <div className="seg-group">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l.value}
-              className={`seg-btn ${settings.layout === l.value ? 'active' : ''}`}
-              onClick={() => onChange({ layout: l.value })}
-            >
-              {l.value === 'vertical' ? '⊟' : '◫'} {l.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="settings-row">
-        <span className="settings-label">Cookie 管理</span>
-        <label className="inline-label">
-          <input
-            type="checkbox"
-            checked={settings.cookiesEnabled}
-            onChange={(e) => onChange({ cookiesEnabled: e.target.checked })}
-          />
-          自动记录 Set-Cookie 并在发送时附加匹配 Cookie
-        </label>
-      </div>
-      <div className="settings-row settings-row-top">
-        <span className="settings-label">数据备份</span>
-        <div className="settings-backup">
-          <div className="seg-group">
-            <button className="btn-secondary" onClick={onBackup}>备份到文件…</button>
-            <button className="btn-secondary" onClick={onRestore}>从备份恢复…</button>
+        <div className="settings-layout">
+          <nav className="settings-nav">
+            {TABS.map((t) => (
+              <button key={t.key} className={`settings-nav-item ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+                <span className="settings-nav-icon">{t.icon}</span>
+                <span>{t.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="settings-content">
+            {tab === 'appearance' && (
+              <>
+                <div className="settings-section-title">主题</div>
+                <div className="seg-group seg-group-wrap">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.value}
+                      className={`seg-btn ${settings.theme === t.value ? 'active' : ''}`}
+                      onClick={() => onChange({ theme: t.value })}
+                    >
+                      {t.dark ? '☾' : '☀'} {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="settings-section-title">强调色</div>
+                <span className="accent-picker">
+                  {ACCENTS.map((a) => (
+                    <span
+                      key={a.value}
+                      className={`accent-dot ${settings.accent === a.value ? 'active' : ''}`}
+                      style={{ background: a.color }}
+                      title={a.label}
+                      onClick={() => onChange({ accent: a.value })}
+                    />
+                  ))}
+                </span>
+              </>
+            )}
+            {tab === 'editor' && (
+              <>
+                <div className="settings-section-title">请求响应布局</div>
+                <div className="seg-group">
+                  {LAYOUTS.map((l) => (
+                    <button
+                      key={l.value}
+                      className={`seg-btn ${settings.layout === l.value ? 'active' : ''}`}
+                      onClick={() => onChange({ layout: l.value })}
+                    >
+                      {l.value === 'vertical' ? '⊟' : '◫'} {l.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="settings-section-title">Cookie 管理</div>
+                <label className="inline-label">
+                  <input
+                    type="checkbox"
+                    checked={settings.cookiesEnabled}
+                    onChange={(e) => onChange({ cookiesEnabled: e.target.checked })}
+                  />
+                  自动记录 Set-Cookie 并在发送时附加匹配 Cookie
+                </label>
+                <div className="settings-section-title">快捷键</div>
+                <div className="shortcut-table">
+                  <div className="shortcut-row"><span>发送请求</span><kbd>Shift+F10</kbd></div>
+                  <div className="shortcut-row"><span>命令面板</span><kbd>Ctrl+Shift+A</kbd></div>
+                  <div className="shortcut-row"><span>保存</span><kbd>Ctrl+S</kbd></div>
+                  <div className="shortcut-row"><span>新建标签</span><kbd>Ctrl+T</kbd></div>
+                  <div className="shortcut-row"><span>关闭标签</span><kbd>Ctrl+F4</kbd></div>
+                  <div className="shortcut-row"><span>复制标签</span><kbd>Ctrl+D</kbd></div>
+                  <div className="shortcut-row"><span>切换标签</span><kbd>Alt+←/→</kbd></div>
+                  <div className="shortcut-row"><span>切换环境</span><kbd>Ctrl+E</kbd></div>
+                  <div className="shortcut-row"><span>切换侧边栏</span><kbd>Alt+1</kbd></div>
+                  <div className="shortcut-row"><span>注释行</span><kbd>Ctrl+/</kbd></div>
+                  <div className="shortcut-row"><span>新建窗口</span><kbd>Ctrl+Shift+N</kbd></div>
+                </div>
+              </>
+            )}
+            {tab === 'data' && (
+              <>
+                <div className="settings-section-title">备份与恢复</div>
+                <div className="settings-backup">
+                  <div className="seg-group">
+                    <button className="btn-secondary" onClick={onBackup}>备份到文件…</button>
+                    <button className="btn-secondary" onClick={onRestore}>从备份恢复…</button>
+                  </div>
+                  <div className="settings-backup-hint">备份包含集合 / 环境 / 全局变量 / 历史 / Mock / Cookie / 设置；恢复将覆盖当前数据</div>
+                </div>
+              </>
+            )}
+            {tab === 'about' && (
+              <>
+                <div className="about-block-v2">
+                  <img className="about-logo" src="./icon.png" alt="" />
+                  <div className="about-meta">
+                    <div className="about-name">ReqMock <span className="about-version">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</span></div>
+                    <div className="about-desc">API 调试客户端 + Mock 服务桌面工具</div>
+                  </div>
+                </div>
+                <div className="settings-section-title">链接</div>
+                <div className="about-links">
+                  <a className="about-link" href="https://github.com/leleworld/ReqMock" target="_blank" rel="noreferrer">GitHub 仓库</a>
+                  <a className="about-link" href="https://github.com/leleworld/ReqMock/releases" target="_blank" rel="noreferrer">版本发布</a>
+                </div>
+                <div className="settings-section-title">更新</div>
+                <button className="btn-secondary" onClick={onCheckUpdate}>检查更新</button>
+              </>
+            )}
           </div>
-          <div className="settings-backup-hint">备份包含集合 / 环境 / 全局变量 / 历史 / Mock / Cookie / 设置；恢复将覆盖当前数据</div>
         </div>
-      </div>
-      <div className="env-hint">快捷键：Shift+F10 发送 · Ctrl+S 保存 · Ctrl+T 新建标签 · Ctrl+F4 关闭标签 · Ctrl+Shift+N 新建窗口</div>
-      <div className="about-block">
-        <img className="about-logo" src="./icon.png" alt="" />
-        <div className="about-meta">
-          <div className="about-name">ReqMock <span className="about-version">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</span></div>
-          <div className="about-desc">API 调试客户端 + Mock 服务桌面工具 · <a className="about-link" href="https://github.com/leleworld/ReqMock" target="_blank" rel="noreferrer">GitHub</a></div>
-        </div>
-        <button className="btn-secondary about-update-btn" onClick={onCheckUpdate}>检查更新</button>
-      </div>
-      <div className="modal-footer">
-        <button className="btn-primary" onClick={onClose}>完成</button>
-      </div>
-    </Modal>
+      </motion.div>
+    </motion.div>
   );
 }
 
