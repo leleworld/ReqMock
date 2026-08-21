@@ -12,6 +12,7 @@ import SsePanel from './components/SsePanel.jsx';
 import ToolsPanel, { TOOLS } from './components/ToolsPanel.jsx';
 import RunnerPanel from './components/RunnerPanel.jsx';
 import CommandPalette from './components/CommandPalette.jsx';
+import GlobalSearch from './components/GlobalSearch.jsx';
 import TopBar from './components/TopBar.jsx';
 import { JbIcon } from './components/Icons.jsx';
 import UtilBar from './components/UtilBar.jsx';
@@ -148,6 +149,7 @@ export default function App() {
   // 通用确认弹窗（统一替代 window.confirm）：{title, message, danger, onConfirm}
   const [confirm, setConfirm] = useState(null);
   const [paletteOpen, setPaletteOpen] = useState(false); // Ctrl+K 全局搜索/命令面板
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false); // Ctrl+Shift+F 全局搜索
   const [consoleOpen, setConsoleOpen] = useState(false); // 底部控制台抽屉
   const [consoleLogs, setConsoleLogs] = useState([]); // 控制台：请求日志（会话级）
   const [scriptLogs, setScriptLogs] = useState([]); // 控制台：脚本 console 输出（会话级）
@@ -1044,6 +1046,8 @@ export default function App() {
       if (shift && !ctrl && !alt && k === 'F10') { e.preventDefault(); h.send(); }
       // Ctrl+Shift+A: 命令面板（IDEA: Find Action）
       else if (ctrl && shift && k.toLowerCase() === 'a') { e.preventDefault(); setPaletteOpen((v) => !v); }
+      // Ctrl+Shift+F: 全局搜索（跨集合搜索请求）
+      else if (ctrl && shift && k.toLowerCase() === 'f') { e.preventDefault(); setGlobalSearchOpen((v) => !v); }
       // Ctrl+S: 保存
       else if (ctrl && !shift && !alt && k.toLowerCase() === 's') { e.preventDefault(); h.save(); }
       // Ctrl+T: 新建标签
@@ -1812,6 +1816,10 @@ export default function App() {
                   <RequestEditor
                     request={activeRequest}
                     varNames={varNames}
+                    fontSize={settings.fontSize}
+                    tabSize={settings.tabSize}
+                    wordWrap={settings.wordWrap}
+                    showLineNumbers={settings.lineNumbers}
                     varMap={buildVarMap(activeEnv, globals)}
                     ownerCollection={findOwnerCollection(collections, activeRequest.id)}
                     onChange={setActiveRequest}
@@ -1833,6 +1841,10 @@ export default function App() {
               <ResponsePanel
                 response={curTab.response}
                 sending={curTab.sending}
+                fontSize={settings.fontSize}
+                tabSize={settings.tabSize}
+                wordWrap={settings.wordWrap}
+                showLineNumbers={settings.lineNumbers}
                 scriptResult={curTab.scriptResult}
                 onResponseToMock={handleResponseToMock}
                 onSaveExample={handleSaveExample}
@@ -1857,6 +1869,10 @@ export default function App() {
           <MockPanel
             mock={mock}
             mockRunning={mockRunning}
+            fontSize={settings.fontSize}
+            tabSize={settings.tabSize}
+            wordWrap={settings.wordWrap}
+            showLineNumbers={settings.lineNumbers}
             mockBusy={mockBusy}
             mockLogs={mockLogs}
             selectedRouteId={selectedRouteId}
@@ -2053,6 +2069,14 @@ export default function App() {
           onOpenCookies={() => openPageTab('cookies')}
           onOpenSettings={() => setModal({ type: 'settings' })}
           onActivateEnv={setActiveEnvId}
+        />
+      )}
+
+      {globalSearchOpen && (
+        <GlobalSearch
+          collections={collections}
+          onClose={() => setGlobalSearchOpen(false)}
+          onOpenRequest={handleOpenRequest}
         />
       )}
 

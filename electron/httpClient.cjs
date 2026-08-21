@@ -37,7 +37,7 @@ async function sendHttpRequest(payload, signal) {
     method = 'GET', url, headers = [], params = [],
     bodyType = 'none', body = '', formData = [], graphql = null,
     timeoutMs = 30000, proxy = '', followRedirects = true,
-    httpVersion = 'auto', sslVerify = true, omitEmptyEq = false
+    httpVersion = 'auto', sslVerify = true, omitEmptyEq = false, maxRedirects = MAX_REDIRECTS
   } = payload;
 
   let finalUrl;
@@ -118,7 +118,7 @@ async function sendHttpRequest(payload, signal) {
   let lastResult = null;
 
   try {
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    for (let hop = 0; hop <= maxRedirects; hop++) {
       if (signal && signal.aborted) throw makeError('请求已取消', 'REQ_CANCELED');
       const hopHeaders = { ...reqHeaders };
       if (hop > 0) delete hopHeaders['Host'];
@@ -154,7 +154,7 @@ async function sendHttpRequest(payload, signal) {
         delete reqHeaders['Content-Type'];
         delete reqHeaders['Content-Length'];
       }
-      if (hop === MAX_REDIRECTS) throw makeError('重定向次数超过上限 ' + MAX_REDIRECTS, 'TOO_MANY_REDIRECTS');
+      if (hop === maxRedirects) throw makeError('重定向次数超过上限 ' + maxRedirects, 'TOO_MANY_REDIRECTS');
     }
 
     const decompressed = decompressBody(lastResult.rawBody, lastResult.headers['content-encoding']);

@@ -14,6 +14,10 @@ import { JbIcon } from './Icons.jsx';
 const SEARCH_MAX_HITS = 5000;
 /** Hex 视图最大显示字节数 */
 const HEX_MAX_BYTES = 512 * 1024;
+/** 响应体大文件阈值（1MB） */
+const LARGE_BODY_THRESHOLD = 1024 * 1024;
+/** 大文件最大显示行数 */
+const LARGE_BODY_MAX_LINES = 5000;
 /** 页签/视图顺序：切换时据序号差决定滑动方向 */
 const RESP_TABS = ['body', 'headers', 'cookies', 'timings', 'trace', 'tests'];
 const RESP_VIEWS = ['pretty', 'raw', 'tree', 'hex', 'preview', 'diff'];
@@ -30,6 +34,28 @@ function DeferredMount({ children }) {
 }
 
 /**
+ * 发送实时计时器：sending=true 时每 100ms 递增显示
+ */
+function SendingTimer() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    const timer = setInterval(() => {
+      setElapsed(Math.round((performance.now() - start) / 100) / 10);
+    }, 100);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="sending-timer">
+      <span className="sending-timer-dot" />
+      <span className="sending-timer-text">
+        发送中... {elapsed.toFixed(1)}s
+      </span>
+    </div>
+  );
+}
+
+/**
  * 响应面板：状态行 + Body(Pretty/Raw/Tree/Hex + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
  * 失败时展示诊断视图：错误解释 + 排查建议 + 实际发送的请求 + 重试/复制 cURL 等快捷动作
  */
@@ -37,7 +63,8 @@ export default function ResponsePanel({
   response, sending, scriptResult, onResponseToMock, onToast,
   layout, onToggleLayout, focused, onToggleFocus, historyList = [], onSelectHistory,
   onRetry, onRetryNoSsl, onOpenConsole,
-  onSaveExample, onSaveBody, onExtractVariable, onInsertAssertion
+  onSaveExample, onSaveBody, onExtractVariable, onInsertAssertion,
+  fontSize, tabSize, wordWrap, showLineNumbers
 }) {
   const [tab, setTab] = useState('body');
   const [view, setView] = useState('pretty');
@@ -275,6 +302,7 @@ export default function ResponsePanel({
     return (
       <div className="response-panel">
         <div className="response-corner">{cornerActions}</div>
+        <SendingTimer />
         <div className="response-placeholder" aria-busy="true">
           <div className="resp-skeleton">
             <div className="skel-line w60" />
@@ -296,11 +324,34 @@ export default function ResponsePanel({
         <div className="response-placeholder">
           <div className="empty-hero">
             <span className="empty-hero-icon" aria-hidden="true"><JbIcon name="play" size={22} /></span>
-            <div className="empty-hero-title">发送请求后在此查看响应</div>
+            <div className="empty-hero-title">发送请求查看响应</div>
+            <div className="empty-hero-subtitle">编辑左侧请求参数后点击发送，响应结果将在此展示</div>
             <div className="empty-hero-keys">
+              <span className="kbd-chip"><JbIcon name="play" size={11} /> Shift + F10</span> 发送请求
               <span className="kbd-chip">Ctrl + Enter</span> 发送
               <span className="kbd-chip">Ctrl + F</span> 体内搜索
-              <span className="kbd-chip">Ctrl + /</span> 快捷键速查
+            </div>
+            {historyList.length > 0 && (
+              <div className="empty-hero-history">
+                <div className="empty-hero-history-title"><JbIcon name="time" size={12} /> 最近请求</div>
+                <div className="empty-hero-history-list">
+                  {historyList.slice(0, 3).map((h) => (
+                    <button
+                      key={h.id}
+                      className="empty-hero-history-item"
+                      onClick={() => onSelectHistory && onSelectHistory(h)}
+                    >
+                      {h.response.ok ? (
+                        <span className={`status-tag ${h.response.status < 400 ? 'status-good' : 'status-bad'}`}>{h.response.status}</span>
+                      ) : (
+                        <span className="status-tag status-bad">失败</span>
+                      )}
+                      <span className="empty-hero-history-time">{h.time}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>
           </div>
         </div>
@@ -436,6 +487,7 @@ export default function ResponsePanel({
         <span className="meta">{formatSize(response.sizeBytes)}</span>
         {response.fromHistory && <span className="meta" title="此为历史记录中保存的响应快照">📜 历史快照 {response.historyTime || ''}</span>}
         <span className="flex-spacer" />
+        {onRetry && <button className="icon-btn" title="重新发送请求 (Shift+F10)" onClick={onRetry}><JbIcon name="update" size={14} /></button>}
         {historyBtn}
         {onSaveExample && <button className="btn-secondary" title="把当前响应保存为请求示例（示例可一键转 Mock）" onClick={onSaveExample}>存为示例</button>}
         <button className="btn-secondary" onClick={onResponseToMock}>响应转 Mock</button>
@@ -554,12 +606,30 @@ export default function ResponsePanel({
         {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
         {tab === 'body' && view === 'pretty' && (
           <DeferredMount>
-            <CodeEditor className="response-code" value={prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} />
+            {response.body.length > LARGE_BODY_THRESHOLD && (
+              <div className="large-body-banner">
+                <JbIcon name="warning" size={14} />
+                <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
+                <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+              </div>
+            )}
+            <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
           </DeferredMount>
         )}
         {tab === 'body' && view === 'raw' && (
           <DeferredMount>
-            <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>{renderBodyText()}</pre>
+            {response.body.length > LARGE_BODY_THRESHOLD && (
+              <div className="large-body-banner">
+                <JbIcon name="warning" size={14} />
+                <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
+                <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+              </div>
+            )}
+            <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>
+              {response.body.length > LARGE_BODY_THRESHOLD
+                ? response.body.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n')
+                : renderBodyText()}
+            </pre>
           </DeferredMount>
         )}
         {tab === 'body' && view === 'tree' && (
@@ -660,9 +730,18 @@ function FailureView({ response, scriptResult, historyBtn, layoutBtn, onRetry, o
             <button
               className="icon-btn"
               title="复制错误信息"
-              onClick={() => copyText(response.error || '', '已复制错误信息')}
+              onClick={() => copyText(
+                [explain.title, response.error, explain.code ? `错误码: ${explain.code}` : '', explain.phaseLabel ? `阶段: ${explain.phaseLabel}` : ''].filter(Boolean).join('\n'),
+                '已复制完整错误信息'
+              )}
             ><JbIcon name="copy" size={14} /></button>
           </div>
+          {response.errorStack && (
+            <details className="fail-stack-details">
+              <summary>错误堆栈</summary>
+              <pre className="fail-raw fail-stack">{response.errorStack}</pre>
+            </details>
+          )}
           {explain.suggestions.length > 0 && (
             <div className="fail-suggests">
               <div className="fail-suggests-title">排查建议</div>

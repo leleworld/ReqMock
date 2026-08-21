@@ -257,7 +257,7 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets, fontSize, tabSize, wordWrap, showLineNumbers }) {
   // 当前活动页签
   const [tab, setTabRaw] = useState('params');
   const [tabDir, setTabDir] = useState(1); // 滑动方向：目标页签在右侧为 1，左侧为 -1
@@ -653,6 +653,10 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               <CodeEditor
                 className="body-code"
                 language={request.bodyType === 'json' ? 'json' : 'text'}
+                fontSize={fontSize}
+                tabSize={tabSize}
+                wordWrap={wordWrap}
+                showLineNumbers={showLineNumbers}
                 placeholder={request.bodyType === 'json' ? '{ "key": "value" }' : '原始文本'}
                 value={request.body}
                 onChange={(v) => { set('body', v); setFmtError(''); }}
@@ -682,6 +686,10 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               <CodeEditor
                 className="script-code"
                 language="javascript"
+                fontSize={fontSize}
+                tabSize={tabSize}
+                wordWrap={wordWrap}
+                showLineNumbers={showLineNumbers}
                 placeholder={'// 示例：\n// rm.env.set("token", "abc123");\n// rm.request.headers.push({ key: "X-Trace", value: rm.env.get("token"), enabled: true });'}
                 value={request.preScript || ''}
                 onChange={(v) => set('preScript', v)}
@@ -698,6 +706,10 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               <CodeEditor
                 className="script-code"
                 language="javascript"
+                fontSize={fontSize}
+                tabSize={tabSize}
+                wordWrap={wordWrap}
+                showLineNumbers={showLineNumbers}
                 placeholder={'// 示例：\nrm.test("状态码为200", () => rm.assert(rm.response.status === 200));\n// rm.env.set("uid", rm.response.json().data.id);'}
                 value={request.postScript || ''}
                 onChange={(v) => set('postScript', v)}
@@ -966,6 +978,10 @@ function GraphqlEditor({ request, varMap, onChange }) {
           <CodeEditor
             className="gql-code"
             language="text"
+            fontSize={fontSize}
+            tabSize={tabSize}
+            wordWrap={wordWrap}
+            showLineNumbers={showLineNumbers}
             placeholder={'query Demo($id: ID!) {\n  user(id: $id) {\n    name\n  }\n}'}
             value={gq.query}
             onChange={(v) => setGq({ query: v })}
@@ -976,6 +992,10 @@ function GraphqlEditor({ request, varMap, onChange }) {
           <CodeEditor
             className="gql-code"
             language="json"
+            fontSize={fontSize}
+            tabSize={tabSize}
+            wordWrap={wordWrap}
+            showLineNumbers={showLineNumbers}
             placeholder={'{\n  "id": "1"\n}'}
             value={gq.variables}
             onChange={(v) => setGq({ variables: v })}

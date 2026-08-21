@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { countRequests } from '../utils/collectionUtil.js';
 import { JbIcon } from './Icons.jsx';
 
@@ -35,9 +35,91 @@ function getDropZoneHalf(e, el) {
  * 支持拖拽排序：请求之间排序、文件夹之间排序、请求拖入/拖出文件夹、悬停自动展开
  */
 export default function CollectionTree(props) {
-  const { collections, filter, onNewRequest, onNewCollection, onImport } = props;
+  const { collections, filter, onNewRequest, onNewCollection, onImport,
+    onRenameNode, onDeleteCollection, onDeleteFolder, onDeleteRequest,
+    onExportCollection, onAddFolder, onDuplicateNode, onDuplicateRequest,
+    onCopyAsCurl, onMoveToNode
+  } = props;
   const q = (filter || '').trim().toLowerCase();
   const shown = q ? collections.map((c) => filterNode(c, q)).filter(Boolean) : collections;
+
+  // ===== 右键上下文菜单状态 =====
+  const [ctxMenu, setCtxMenu] = useState(null); // { x, y, nodeType, nodeId, nodeName, collectionId }
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  // 点击外部关闭
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handler = () => closeCtxMenu();
+    document.addEventListener('click', handler);
+    document.addEventListener('contextmenu', handler);
+    return () => {
+      document.removeEventListener('click', handler);
+      document.removeEventListener('contextmenu', handler);
+    };
+  }, [ctxMenu, closeCtxMenu]);
+
+  // Escape 关闭
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handler = (e) => { if (e.key === 'Escape') closeCtxMenu(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [ctxMenu, closeCtxMenu]);
+
+  const handleContextMenu = useCallback((e, nodeType, nodeId, nodeName, collectionId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, nodeType, nodeId, nodeName, collectionId });
+  }, []);
+
+  // 菜单操作处理
+  const handleMenuAction = useCallback((action) => {
+    if (!ctxMenu) return;
+    const { nodeType, nodeId, nodeName, collectionId } = ctxMenu;
+    closeCtxMenu();
+    switch (action) {
+      case 'newRequest':
+        if (onNewRequest) onNewRequest(nodeId);
+        break;
+      case 'newFolder':
+      case 'newSubFolder':
+        if (onAddFolder) onAddFolder(nodeId);
+        break;
+      case 'rename':
+        if (onRenameNode) onRenameNode(nodeId, nodeName);
+        break;
+      case 'duplicate':
+        if (onDuplicateNode) onDuplicateNode(nodeId);
+        break;
+      case 'duplicateRequest':
+        if (onDuplicateRequest) onDuplicateRequest(nodeId);
+        else if (onDuplicateNode) onDuplicateNode(nodeId);
+        break;
+      case 'copyAsCurl':
+        if (onCopyAsCurl) onCopyAsCurl(nodeId);
+        break;
+      case 'exportCollection':
+        if (onExportCollection) onExportCollection(nodeId);
+        break;
+      case 'moveTo':
+        if (onMoveToNode) onMoveToNode(nodeId);
+        break;
+      case 'deleteCollection':
+        if (onDeleteCollection) onDeleteCollection(nodeId);
+        break;
+      case 'deleteFolder':
+        if (onDeleteFolder) onDeleteFolder(nodeId);
+        break;
+      case 'deleteRequest':
+        if (onDeleteRequest) onDeleteRequest(nodeId);
+        break;
+      default:
+        break;
+    }
+  }, [ctxMenu, closeCtxMenu, onNewRequest, onAddFolder, onRenameNode, onDuplicateNode, onDuplicateRequest, onCopyAsCurl, onExportCollection, onMoveToNode, onDeleteCollection, onDeleteFolder, onDeleteRequest]);
+
   return (
     <div className="collection-tree">
       {collections.length === 0 && (
@@ -51,8 +133,11 @@ export default function CollectionTree(props) {
       )}
       {q && collections.length > 0 && shown.length === 0 && <div className="empty-hint">无匹配结果</div>}
       {shown.map((col) => (
-        <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} />
+        <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} onContextMenu={handleContextMenu} />
       ))}
+
+      {/* 右键上下文菜单 */}
+      {ctxMenu && <ContextMenu ctxMenu={ctxMenu} onAction={handleMenuAction} onClose={closeCtxMenu} />}
     </div>
   );
 }
@@ -71,7 +156,7 @@ function filterNode(node, q) {
 }
 
 function CollectionNode(props) {
-  const { collection, forceOpen, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest, onMoveFolder } = props;
+  const { collection, forceOpen, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
   const [open, setOpen] = useState(true);
   const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
   const rowRef = useRef(null);
@@ -86,6 +171,9 @@ function CollectionNode(props) {
         ref={rowRef}
         className={`tree-row tree-collection-row${dropState === 'into' ? ' drop-into' : ''}${dropState === 'before' ? ' drop-before' : ''}${dropState === 'after' ? ' drop-after' : ''}`}
         onClick={() => setOpen(!open)}
+        onContextMenu={(e) => {
+          if (onContextMenu) onContextMenu(e, 'collection', collection.id, collection.name, collection.id);
+        }}
         onDragOver={(e) => {
           if (!hasTreeDrag(e)) return;
           e.preventDefault(); e.stopPropagation();
@@ -144,7 +232,7 @@ function CollectionNode(props) {
 }
 
 function FolderNode(props) {
-  const { folder, node: parentNode, depth, forceOpen, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest, onMoveFolder } = props;
+  const { folder, node: parentNode, depth, forceOpen, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
   const [open, setOpen] = useState(false);
   const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
   const [dragging, setDragging] = useState(false);
@@ -162,6 +250,9 @@ function FolderNode(props) {
         style={{ paddingLeft: depth * 14 }}
         onClick={() => setOpen(!open)}
         draggable
+        onContextMenu={(e) => {
+          if (onContextMenu) onContextMenu(e, 'folder', folder.id, folder.name, null);
+        }}
         onDragStart={(e) => {
           e.dataTransfer.setData(DRAG_MIME_FOLDER, folder.id);
           e.dataTransfer.effectAllowed = 'move';
@@ -242,7 +333,7 @@ function FolderNode(props) {
 
 /** 渲染某节点下的子文件夹与请求 */
 function NodeBody(props) {
-  const { node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest, onMoveFolder } = props;
+  const { node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest, onMoveFolder, onContextMenu } = props;
   const folders = node.folders || [];
   const requests = node.requests || [];
 
@@ -261,6 +352,7 @@ function NodeBody(props) {
           onOpenRequest={onOpenRequest}
           onDeleteRequest={onDeleteRequest}
           onMoveRequest={onMoveRequest}
+          onContextMenu={onContextMenu}
         />
       ))}
       {folders.length === 0 && requests.length === 0 && (
@@ -286,7 +378,7 @@ function NodeBody(props) {
 }
 
 /** 单个请求行，支持拖拽排序 */
-function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest }) {
+function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest, onContextMenu }) {
   const [dropZone, setDropZone] = useState(null); // 'before' | 'after'
   const [dragging, setDragging] = useState(false);
   const rowRef = useRef(null);
@@ -298,6 +390,9 @@ function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDelete
       style={{ paddingLeft: depth * 14 + 14 }}
       onClick={() => onOpenRequest(req)}
       draggable
+      onContextMenu={(e) => {
+        if (onContextMenu) onContextMenu(e, 'request', req.id, req.name, null);
+      }}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_MIME_REQUEST, req.id);
         e.dataTransfer.effectAllowed = 'move';
@@ -344,4 +439,92 @@ function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDelete
       </span>
     </div>
   );
+}
+
+/** 右键上下文菜单组件 */
+function ContextMenu({ ctxMenu, onAction, onClose }) {
+  const { x, y, nodeType } = ctxMenu;
+  const menuRef = useRef(null);
+
+  // 确保菜单不超出视口
+  const [pos, setPos] = useState({ left: x, top: y });
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = x;
+    let top = y;
+    if (x + rect.width > vw) left = vw - rect.width - 4;
+    if (y + rect.height > vh) top = vh - rect.height - 4;
+    if (left < 0) left = 4;
+    if (top < 0) top = 4;
+    setPos({ left, top });
+  }, [x, y]);
+
+  const items = getMenuItems(nodeType);
+
+  return (
+    <div
+      ref={menuRef}
+      className="context-menu"
+      style={{ left: pos.left, top: pos.top }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    >
+      {items.map((item, i) =>
+        item.separator ? (
+          <div key={`sep-${i}`} className="context-menu-separator" />
+        ) : (
+          <div
+            key={item.action}
+            className={`context-menu-item${item.danger ? ' context-menu-item-danger' : ''}`}
+            onClick={() => onAction(item.action)}
+          >
+            {item.label}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+/** 根据节点类型返回菜单项列表 */
+function getMenuItems(nodeType) {
+  switch (nodeType) {
+    case 'collection':
+      return [
+        { label: '新建请求', action: 'newRequest' },
+        { label: '新建文件夹', action: 'newFolder' },
+        { separator: true },
+        { label: '重命名', action: 'rename' },
+        { label: '复制', action: 'duplicate' },
+        { separator: true },
+        { label: '导出集合', action: 'exportCollection' },
+        { separator: true },
+        { label: '删除集合', action: 'deleteCollection', danger: true },
+      ];
+    case 'folder':
+      return [
+        { label: '新建请求', action: 'newRequest' },
+        { label: '新建子文件夹', action: 'newSubFolder' },
+        { separator: true },
+        { label: '重命名', action: 'rename' },
+        { label: '移动到…', action: 'moveTo' },
+        { separator: true },
+        { label: '删除', action: 'deleteFolder', danger: true },
+      ];
+    case 'request':
+      return [
+        { label: '复制请求', action: 'duplicateRequest' },
+        { label: '复制为 cURL', action: 'copyAsCurl' },
+        { separator: true },
+        { label: '重命名', action: 'rename' },
+        { label: '移动到…', action: 'moveTo' },
+        { separator: true },
+        { label: '删除', action: 'deleteRequest', danger: true },
+      ];
+    default:
+      return [];
+  }
 }

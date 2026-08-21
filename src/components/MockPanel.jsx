@@ -57,7 +57,8 @@ export default function MockPanel(props) {
   const {
     mock, mockRunning, mockBusy, mockLogs, selectedRouteId,
     onPortChange, onToggle,
-    onUpdateRoute, onDeleteRoute, onRouteToRequest, onClearLogs
+    onUpdateRoute, onDeleteRoute, onRouteToRequest, onClearLogs,
+    fontSize, tabSize, wordWrap, showLineNumbers
   } = props;
 
   const route = mock.routes.find((r) => r.id === selectedRouteId) || null;
@@ -297,6 +298,10 @@ export default function MockPanel(props) {
                 <CodeEditor
                   className="mock-script-code"
                   language="javascript"
+                  fontSize={fontSize}
+                  tabSize={tabSize}
+                  wordWrap={wordWrap}
+                  showLineNumbers={showLineNumbers}
                   placeholder={SCRIPT_PLACEHOLDER}
                   value={route.script || ''}
                   onChange={(v) => set('script', v)}

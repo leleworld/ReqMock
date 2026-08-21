@@ -99,7 +99,13 @@ export async function executeRequest(reqSnapshot, ctx) {
   }
 
   // 4. 发送
-  const payload = cancelToken ? { ...finalReq, cancelToken } : finalReq;
+  // 注入 settings 中的网络配置到发送 payload
+  const netOpts = {};
+  if (settings.timeout != null) netOpts.timeoutMs = settings.timeout * 1000;
+  if (settings.sslVerify != null) netOpts.sslVerify = settings.sslVerify;
+  if (settings.maxRedirects != null) netOpts.maxRedirects = settings.maxRedirects;
+  const basePayload = { ...finalReq, ...netOpts };
+  const payload = cancelToken ? { ...basePayload, cancelToken } : basePayload;
   const result = await send(payload);
 
   // 5. 后置脚本
