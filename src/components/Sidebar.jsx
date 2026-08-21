@@ -16,13 +16,13 @@ const ACTIVITIES = [
   { key: 'env', icon: 'parameters', label: '环境变量' },
   { key: 'mocks', icon: 'cloud', label: 'Mock 服务' },
   { key: 'cookies', icon: 'data', label: 'Cookie' },
-  { key: 'history', icon: 'history', label: '历史记录' },
+  { key: 'history', icon: 'time', label: '历史记录' },
   { key: 'tools', icon: 'magic-wand', label: '工具箱' }
 ];
 
 export default function Sidebar(props) {
   const {
-    activity, panelOpen, onActivity,
+    activity, panelOpen, onActivity, onTogglePanel,
     collections, environments, activeEnvId,
     history, mock, mockRunning, selectedRouteId,
     cookieJar, curTab,
@@ -281,6 +281,23 @@ export default function Sidebar(props) {
         </motion.div>
       )}
       </AnimatePresence>
+
+      {/* Mini 模式：面板收起时显示紧凑图标栏 */}
+      {!panelOpen && (
+        <div className="sidebar-mini">
+          {ACTIVITIES.map((a) => (
+            <button
+              key={a.key}
+              className={`sidebar-mini-btn ${activity === a.key ? 'active' : ''}`}
+              title={a.label}
+              onClick={() => { onActivity(a.key); if (onTogglePanel) onTogglePanel(); }}
+            >
+              <JbIcon name={a.icon} size={17} />
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 侧栏宽度拖拽手柄：悬停/拖拽时高亮为强调色 */}
       {panelOpen && (
         <div
@@ -297,6 +314,7 @@ export default function Sidebar(props) {
 function HistoryPane({ history, onOpen, onDelete, onClear, onCopyCurl }) {
   const [menu, setMenu] = useState(null); // { item, x, y }
   const [collapsed, setCollapsed] = useState({}); // domain -> 是否折叠
+  const [filter, setFilter] = useState(''); // URL 搜索过滤
 
   useEffect(() => {
     if (!menu) return;
@@ -305,9 +323,14 @@ function HistoryPane({ history, onOpen, onDelete, onClear, onCopyCurl }) {
     return () => window.removeEventListener('mousedown', close);
   }, [menu]);
 
+  // 按搜索关键字过滤
+  const filtered = filter.trim()
+    ? history.filter((item) => (item.url || '').toLowerCase().includes(filter.trim().toLowerCase()))
+    : history;
+
   // 按域名分组（保持时间倒序，组顺序按首次出现）
   const groups = [];
-  for (const item of history) {
+  for (const item of filtered) {
     let domain = '（未知地址）';
     try { domain = new URL(item.url).host || domain; } catch (e) { /* URL 不完整 */ }
     let g = groups.find((x) => x.domain === domain);
@@ -330,7 +353,16 @@ function HistoryPane({ history, onOpen, onDelete, onClear, onCopyCurl }) {
 
   return (
     <>
-      {history.length === 0 && <div className="empty-hint">暂无历史记录，发送请求后自动记录</div>}
+      <div className="tree-search-wrap history-search-wrap">
+        <JbIcon name="search" size={13} />
+        <input
+          className="tree-search"
+          placeholder="搜索 URL…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
+      {filtered.length === 0 && <div className="empty-hint">{filter ? '无匹配记录' : '暂无历史记录，发送请求后自动记录'}</div>}
       {history.length > 0 && (
         <div className="sidebar-toolbar">
           <button className="btn-block" title="清空全部历史记录" onClick={onClear}>清空历史（{history.length}）</button>

@@ -1,15 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { countRequests } from '../utils/collectionUtil.js';
 import { JbIcon } from './Icons.jsx';
 
-// 拖拽自定义 MIME：与文件拖入导入（Files）区分，仅树内请求移动响应
-const DRAG_MIME = 'application/x-reqmock-request';
-const hasReqDrag = (e) => Array.from(e.dataTransfer.types || []).includes(DRAG_MIME);
+// 拖拽自定义 MIME：与文件拖入导入（Files）区分，仅树内移动响应
+const DRAG_MIME_REQUEST = 'application/x-reqmock-request';
+const DRAG_MIME_FOLDER = 'application/x-reqmock-folder';
+const hasTreeDrag = (e) => {
+  const types = Array.from(e.dataTransfer.types || []);
+  return types.includes(DRAG_MIME_REQUEST) || types.includes(DRAG_MIME_FOLDER);
+};
+const hasReqDrag = (e) => Array.from(e.dataTransfer.types || []).includes(DRAG_MIME_REQUEST);
+const hasFolderDrag = (e) => Array.from(e.dataTransfer.types || []).includes(DRAG_MIME_FOLDER);
+
+/** 判断拖入位置：上 1/4 = before, 下 1/4 = after, 中间 = into */
+function getDropZone(e, el) {
+  const rect = el.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  const h = rect.height;
+  if (y < h * 0.25) return 'before';
+  if (y > h * 0.75) return 'after';
+  return 'into';
+}
+
+/** 判断拖入位置（仅上/下）：上半 = before, 下半 = after */
+function getDropZoneHalf(e, el) {
+  const rect = el.getBoundingClientRect();
+  const y = e.clientY - rect.top;
+  return y < rect.height * 0.5 ? 'before' : 'after';
+}
 
 /**
  * 集合树：集合 > 嵌套文件夹 > 请求，支持按关键字过滤（filter）
  * 过滤范围：集合/文件夹名称、请求名称、请求 URL、请求方法（GET/POST 等）
- * 请求行可拖拽：拖到另一请求上插入到其前，拖到集合/文件夹行上移入末尾
+ * 支持拖拽排序：请求之间排序、文件夹之间排序、请求拖入/拖出文件夹、悬停自动展开
  */
 export default function CollectionTree(props) {
   const { collections, filter, onNewRequest, onNewCollection, onImport } = props;
@@ -34,7 +57,7 @@ export default function CollectionTree(props) {
   );
 }
 
-/** 节点名命中时保留整棵子树；否则递归过滤子文件夹与请求（按名称/URL/方法），全空则剔除 */
+/** 节点命中时保留整棵子树；否则递归过滤子文件夹与请求（按名称/URL/方法），全空则剔除 */
 function filterNode(node, q) {
   if ((node.name || '').toLowerCase().includes(q)) return node;
   const folders = (node.folders || []).map((f) => filterNode(f, q)).filter(Boolean);
@@ -48,23 +71,56 @@ function filterNode(node, q) {
 }
 
 function CollectionNode(props) {
-  const { collection, forceOpen, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest } = props;
+  const { collection, forceOpen, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest, onMoveFolder } = props;
   const [open, setOpen] = useState(true);
-  const [dropOver, setDropOver] = useState(false);
+  const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
+  const rowRef = useRef(null);
+  const expandTimer = useRef(null);
   const isOpen = open || forceOpen;
+
+  const clearExpand = () => { if (expandTimer.current) { clearTimeout(expandTimer.current); expandTimer.current = null; } };
 
   return (
     <div className="tree-collection">
       <div
-        className={`tree-row tree-collection-row ${dropOver ? 'drop-into' : ''}`}
+        ref={rowRef}
+        className={`tree-row tree-collection-row${dropState === 'into' ? ' drop-into' : ''}${dropState === 'before' ? ' drop-before' : ''}${dropState === 'after' ? ' drop-after' : ''}`}
         onClick={() => setOpen(!open)}
-        onDragOver={(e) => { if (hasReqDrag(e)) { e.preventDefault(); e.stopPropagation(); setDropOver(true); } }}
-        onDragLeave={() => setDropOver(false)}
+        onDragOver={(e) => {
+          if (!hasTreeDrag(e)) return;
+          e.preventDefault(); e.stopPropagation();
+          // 文件夹拖拽可以有 before/after/into；请求拖拽只有 into
+          if (hasFolderDrag(e)) {
+            setDropState(getDropZone(e, rowRef.current));
+          } else {
+            setDropState('into');
+          }
+          // 悬停 >500ms 自动展开
+          if (!isOpen && !expandTimer.current) {
+            expandTimer.current = setTimeout(() => { setOpen(true); expandTimer.current = null; }, 500);
+          }
+        }}
+        onDragLeave={(e) => {
+          // 只在真正离开时清除（避免子元素触发）
+          if (rowRef.current && !rowRef.current.contains(e.relatedTarget)) {
+            setDropState(null); clearExpand();
+          }
+        }}
         onDrop={(e) => {
-          if (!hasReqDrag(e)) return;
-          e.preventDefault(); e.stopPropagation(); setDropOver(false);
-          const id = e.dataTransfer.getData(DRAG_MIME);
-          if (id && onMoveRequest) onMoveRequest(id, collection.id);
+          if (!hasTreeDrag(e)) return;
+          e.preventDefault(); e.stopPropagation();
+          const zone = dropState;
+          setDropState(null); clearExpand();
+          if (hasReqDrag(e)) {
+            const id = e.dataTransfer.getData(DRAG_MIME_REQUEST);
+            if (id && onMoveRequest) onMoveRequest(id, collection.id);
+          } else if (hasFolderDrag(e)) {
+            const id = e.dataTransfer.getData(DRAG_MIME_FOLDER);
+            if (id && id !== collection.id && onMoveFolder) {
+              // 文件夹拖到集合行上 -> 移入该集合
+              onMoveFolder(id, collection.id);
+            }
+          }
         }}
       >
         <JbIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
@@ -88,24 +144,84 @@ function CollectionNode(props) {
 }
 
 function FolderNode(props) {
-  const { folder, depth, forceOpen, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest } = props;
+  const { folder, node: parentNode, depth, forceOpen, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest, onMoveFolder } = props;
   const [open, setOpen] = useState(false);
-  const [dropOver, setDropOver] = useState(false);
+  const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
+  const [dragging, setDragging] = useState(false);
+  const rowRef = useRef(null);
+  const expandTimer = useRef(null);
   const isOpen = open || forceOpen;
 
+  const clearExpand = () => { if (expandTimer.current) { clearTimeout(expandTimer.current); expandTimer.current = null; } };
+
   return (
-    <div className="tree-folder">
+    <div className={`tree-folder${dragging ? ' dragging' : ''}`}>
       <div
-        className={`tree-row ${dropOver ? 'drop-into' : ''}`}
+        ref={rowRef}
+        className={`tree-row tree-folder-row${dropState === 'into' ? ' drop-into' : ''}${dropState === 'before' ? ' drop-before' : ''}${dropState === 'after' ? ' drop-after' : ''}`}
         style={{ paddingLeft: depth * 14 }}
         onClick={() => setOpen(!open)}
-        onDragOver={(e) => { if (hasReqDrag(e)) { e.preventDefault(); e.stopPropagation(); setDropOver(true); } }}
-        onDragLeave={() => setDropOver(false)}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(DRAG_MIME_FOLDER, folder.id);
+          e.dataTransfer.effectAllowed = 'move';
+          // 延迟设置 dragging 状态避免立即隐藏影响拖拽预览
+          requestAnimationFrame(() => setDragging(true));
+        }}
+        onDragEnd={() => { setDragging(false); }}
+        onDragOver={(e) => {
+          if (!hasTreeDrag(e)) return;
+          e.preventDefault(); e.stopPropagation();
+          const zone = getDropZone(e, rowRef.current);
+          setDropState(zone);
+          // 悬停中间区域 >500ms 自动展开
+          if (zone === 'into' && !isOpen && !expandTimer.current) {
+            expandTimer.current = setTimeout(() => { setOpen(true); expandTimer.current = null; }, 500);
+          }
+          if (zone !== 'into') clearExpand();
+        }}
+        onDragLeave={(e) => {
+          if (rowRef.current && !rowRef.current.contains(e.relatedTarget)) {
+            setDropState(null); clearExpand();
+          }
+        }}
         onDrop={(e) => {
-          if (!hasReqDrag(e)) return;
-          e.preventDefault(); e.stopPropagation(); setDropOver(false);
-          const id = e.dataTransfer.getData(DRAG_MIME);
-          if (id && onMoveRequest) onMoveRequest(id, folder.id);
+          if (!hasTreeDrag(e)) return;
+          e.preventDefault(); e.stopPropagation();
+          const zone = dropState;
+          setDropState(null); clearExpand();
+
+          if (hasReqDrag(e)) {
+            const id = e.dataTransfer.getData(DRAG_MIME_REQUEST);
+            if (!id || !onMoveRequest) return;
+            if (zone === 'into') {
+              // 移入文件夹末尾
+              onMoveRequest(id, folder.id);
+            } else if (zone === 'before') {
+              // 插入到该文件夹的父节点中，该文件夹位置之前（作为同级请求）
+              // 这种情况比较少见，简单处理为移入父节点
+              onMoveRequest(id, folder.id);
+            } else {
+              onMoveRequest(id, folder.id);
+            }
+          } else if (hasFolderDrag(e)) {
+            const id = e.dataTransfer.getData(DRAG_MIME_FOLDER);
+            if (!id || id === folder.id || !onMoveFolder) return;
+            if (zone === 'into') {
+              // 移入该文件夹内
+              onMoveFolder(id, folder.id);
+            } else if (zone === 'before') {
+              // 在该文件夹之前插入（同级排序）
+              onMoveFolder(id, parentNode.id, folder.id);
+            } else {
+              // 在该文件夹之后插入（同级排序）
+              // 找到该文件夹在父节点中的下一个兄弟
+              const siblings = parentNode.folders || [];
+              const curIdx = siblings.findIndex((f) => f.id === folder.id);
+              const nextSibling = curIdx >= 0 && curIdx < siblings.length - 1 ? siblings[curIdx + 1] : null;
+              onMoveFolder(id, parentNode.id, nextSibling ? nextSibling.id : null);
+            }
+          }
         }}
       >
         <JbIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
@@ -126,11 +242,9 @@ function FolderNode(props) {
 
 /** 渲染某节点下的子文件夹与请求 */
 function NodeBody(props) {
-  const { node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest } = props;
+  const { node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest, onMoveFolder } = props;
   const folders = node.folders || [];
   const requests = node.requests || [];
-  // 拖拽悬停的目标请求 id：行顶部展示插入指示线
-  const [overReqId, setOverReqId] = useState(null);
 
   return (
     <>
@@ -138,51 +252,96 @@ function NodeBody(props) {
         <FolderNode key={f.id} {...props} folder={f} depth={depth} />
       ))}
       {requests.map((req) => (
-        <div
+        <RequestRow
           key={req.id}
-          className={`tree-row tree-request ${req.id === activeRequestId ? 'selected' : ''} ${overReqId === req.id ? 'drop-before' : ''}`}
-          style={{ paddingLeft: depth * 14 + 14 }}
-          onClick={() => onOpenRequest(req)}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData(DRAG_MIME, req.id);
-            e.dataTransfer.effectAllowed = 'move';
-          }}
-          onDragOver={(e) => {
-            if (hasReqDrag(e)) { e.preventDefault(); e.stopPropagation(); setOverReqId(req.id); }
-          }}
-          onDragLeave={() => setOverReqId((cur) => (cur === req.id ? null : cur))}
-          onDrop={(e) => {
-            if (!hasReqDrag(e)) return;
-            e.preventDefault(); e.stopPropagation(); setOverReqId(null);
-            const id = e.dataTransfer.getData(DRAG_MIME);
-            if (id && id !== req.id && onMoveRequest) onMoveRequest(id, node.id, req.id);
-          }}
-        >
-          <span className={`method method-${req.method}`}>{req.method}</span>
-          <span className="item-name" title={req.url}>{req.name}</span>
-          <span className="tree-actions">
-            <span
-              className="tree-action tree-action-danger"
-              title="删除请求"
-              onClick={(e) => { e.stopPropagation(); onDeleteRequest(req.id); }}
-            ><JbIcon name="trash" size={12} /></span>
-          </span>
-        </div>
+          req={req}
+          node={node}
+          depth={depth}
+          activeRequestId={activeRequestId}
+          onOpenRequest={onOpenRequest}
+          onDeleteRequest={onDeleteRequest}
+          onMoveRequest={onMoveRequest}
+        />
       ))}
       {folders.length === 0 && requests.length === 0 && (
         <div
           className="empty-hint"
           style={{ paddingLeft: depth * 14 + 14 }}
-          onDragOver={(e) => { if (hasReqDrag(e)) { e.preventDefault(); e.stopPropagation(); } }}
+          onDragOver={(e) => { if (hasTreeDrag(e)) { e.preventDefault(); e.stopPropagation(); } }}
           onDrop={(e) => {
-            if (!hasReqDrag(e)) return;
+            if (!hasTreeDrag(e)) return;
             e.preventDefault(); e.stopPropagation();
-            const id = e.dataTransfer.getData(DRAG_MIME);
-            if (id && onMoveRequest) onMoveRequest(id, node.id);
+            if (hasReqDrag(e)) {
+              const id = e.dataTransfer.getData(DRAG_MIME_REQUEST);
+              if (id && onMoveRequest) onMoveRequest(id, node.id);
+            } else if (hasFolderDrag(e)) {
+              const id = e.dataTransfer.getData(DRAG_MIME_FOLDER);
+              if (id && onMoveFolder) onMoveFolder(id, node.id);
+            }
           }}
         >空（可拖入请求）</div>
       )}
     </>
+  );
+}
+
+/** 单个请求行，支持拖拽排序 */
+function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onMoveRequest }) {
+  const [dropZone, setDropZone] = useState(null); // 'before' | 'after'
+  const [dragging, setDragging] = useState(false);
+  const rowRef = useRef(null);
+
+  return (
+    <div
+      ref={rowRef}
+      className={`tree-row tree-request${req.id === activeRequestId ? ' selected' : ''}${dropZone === 'before' ? ' drop-before' : ''}${dropZone === 'after' ? ' drop-after' : ''}${dragging ? ' dragging' : ''}`}
+      style={{ paddingLeft: depth * 14 + 14 }}
+      onClick={() => onOpenRequest(req)}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_MIME_REQUEST, req.id);
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => setDragging(true));
+      }}
+      onDragEnd={() => { setDragging(false); }}
+      onDragOver={(e) => {
+        if (!hasReqDrag(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        setDropZone(getDropZoneHalf(e, rowRef.current));
+      }}
+      onDragLeave={(e) => {
+        if (rowRef.current && !rowRef.current.contains(e.relatedTarget)) {
+          setDropZone(null);
+        }
+      }}
+      onDrop={(e) => {
+        if (!hasReqDrag(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        const zone = dropZone;
+        setDropZone(null);
+        const id = e.dataTransfer.getData(DRAG_MIME_REQUEST);
+        if (!id || id === req.id || !onMoveRequest) return;
+        // 用 beforeReqId 参数：before 时传当前 req.id，after 时传下一个 req 的 id（或 null 表示末尾）
+        if (zone === 'before') {
+          onMoveRequest(id, node.id, req.id);
+        } else {
+          // after：找到当前请求在父节点中的下一个请求
+          const reqs = node.requests || [];
+          const curIdx = reqs.findIndex((r) => r.id === req.id);
+          const nextReq = curIdx >= 0 && curIdx < reqs.length - 1 ? reqs[curIdx + 1] : null;
+          onMoveRequest(id, node.id, nextReq ? nextReq.id : null);
+        }
+      }}
+    >
+      <span className={`method method-${req.method}`}>{req.method}</span>
+      <span className="item-name" title={req.url}>{req.name}</span>
+      <span className="tree-actions">
+        <span
+          className="tree-action tree-action-danger"
+          title="删除请求"
+          onClick={(e) => { e.stopPropagation(); onDeleteRequest(req.id); }}
+        ><JbIcon name="trash" size={12} /></span>
+      </span>
+    </div>
   );
 }

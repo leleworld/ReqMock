@@ -3,6 +3,7 @@
  * 通过 documentElement 的 data-theme / data-accent 属性驱动 CSS 变量
  */
 import { normalizePresets } from './headerPresets.js';
+import { normalizeParamPresets } from './paramPresets.js';
 
 /* IDEA 预置主题：Islands 系列 + 经典系列，dark 标记用于明暗图标 */
 export const THEMES = [
@@ -49,7 +50,9 @@ export function normalizeSettings(s) {
     splitV: clampNum(settings.splitV, 25, 75, 45),
     splitH: clampNum(settings.splitH, 25, 75, 50),
     // HTTP 请求头预设（内置 + 自定义，随设置持久化）
-    headerPresets: normalizePresets(settings.headerPresets)
+    headerPresets: normalizePresets(settings.headerPresets),
+    // URL 参数预设（内置 + 自定义，随设置持久化）
+    paramPresets: normalizeParamPresets(settings.paramPresets)
   };
 }
 

@@ -8,9 +8,9 @@ export default function WelcomePage(props) {
 
   const actions = [
     { icon: 'file', title: '新建请求', desc: '开始你的第一个 API 调用', keys: 'Ctrl+T', onClick: onNewRequest },
-    { icon: 'quick-guide', title: '命令面板', desc: '搜索集合、环境与工具', keys: 'Ctrl+K', onClick: onOpenPalette },
+    { icon: 'quick-guide', title: '命令面板', desc: '搜索集合、环境与工具', keys: 'Ctrl+Shift+A', onClick: onOpenPalette },
     { icon: 'services', title: 'Mock 服务', desc: '一键启动本地 Mock 接口', keys: '', onClick: onOpenMock },
-    { icon: 'terminal', title: '快捷键速查', desc: '查看完整的键盘快捷键', keys: 'Ctrl+/', onClick: onKbd }
+    { icon: 'terminal', title: '快捷键速查', desc: '查看完整的键盘快捷键', keys: 'F1', onClick: onKbd }
   ];
 
   return (

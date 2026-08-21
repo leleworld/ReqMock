@@ -10,16 +10,25 @@ import { JbIcon } from './Icons.jsx';
  * 支持 Chrome 式标签分组：同组标签包进组色容器（徽标 + 底色条），可折叠；右键菜单管理分组
  * 标签溢出时横向滚动，左右三角按钮 + 右侧「全部标签」下拉快速定位
  * 支持固定（Pin）：被固定的标签/分组常驻左侧固定区，不随滚动、防误关
+ * 支持拖拽排序（HTML5 DnD）与双击重命名
  */
 export default function TabBar({
   tabs, groups, activeTabId, tabMeta, isTabDirty,
-  onSelect, onClose, onNew, onNewWs, onNewSse,
+  onSelect, onClose, onCloneTab, onNew, onNewWs, onNewSse,
   onNewGroup, onAssignGroup, onLeaveGroup, onCloseAll, onCloseToRight, onCloseToLeft,
   onRenameGroup, onRecolorGroup, onToggleGroupCollapse, onUngroup, onCloseGroup,
-  onTogglePinTab, onTogglePinGroup
+  onTogglePinTab, onTogglePinGroup,
+  onReorderTabs, onRenameTab
 }) {
   // 右键菜单：{ type: 'tab', tabId } | { type: 'group', groupId } | { type: 'add' } | { type: 'all' }，含 x/y 弹出坐标
   const [menu, setMenu] = useState(null);
+  // 拖拽排序状态
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [dragOverSide, setDragOverSide] = useState(null); // 'left' | 'right'
+  // 双击重命名状态
+  const [editingTabId, setEditingTabId] = useState(null);
+  const [editingName, setEditingName] = useState('');
   // 标签溢出检测：内容宽度超出可视宽度时显示「全部标签」下拉；同时跟踪左右可滚方向用于边缘渐隐提示
   const listRef = useRef(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -29,6 +38,7 @@ export default function TabBar({
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
+    let raf;
     const check = () => {
       const over = el.scrollWidth > el.clientWidth + 4;
       setOverflowing(over);
@@ -36,12 +46,22 @@ export default function TabBar({
       setFadeR(over && el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
     };
     check();
+    // 延迟复查：等标签入场动画展开后再检测一次
+    raf = requestAnimationFrame(() => {
+      check();
+      raf = requestAnimationFrame(check);
+    });
     el.addEventListener('scroll', check, { passive: true });
     const ro = new ResizeObserver(check);
     ro.observe(el);
+    // 监听子元素变化（标签增减、动画展开），触发溢出重算
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener('scroll', check);
       ro.disconnect();
+      mo.disconnect();
     };
   }, [tabs.length]);
 
@@ -100,8 +120,69 @@ export default function TabBar({
   // 有效固定态：标签自身被固定，或所在分组被固定（整组常驻）
   const isPinnedTab = (t) => !!(t.pinned || (t.groupId && (groupOf(t.groupId) || {}).pinned));
 
+  // ---- 拖拽排序 ----
+  const handleDragStart = (e, idx) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    // 延迟添加 dragging 样式（避免拖拽图像也半透明）
+    requestAnimationFrame(() => {
+      e.target.classList.add('dragging');
+    });
+  };
+
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragIdx === null || idx === dragIdx) {
+      setDragOverIdx(null);
+      setDragOverSide(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mid = rect.left + rect.width / 2;
+    const side = e.clientX < mid ? 'left' : 'right';
+    setDragOverIdx(idx);
+    setDragOverSide(side);
+  };
+
+  const handleDrop = (e, toIdx) => {
+    e.preventDefault();
+    const fromIdx = dragIdx;
+    if (fromIdx !== null && fromIdx !== toIdx && onReorderTabs) {
+      onReorderTabs(fromIdx, toIdx);
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
+    setDragOverSide(null);
+  };
+
+  const handleDragEnd = (e) => {
+    e.target.classList.remove('dragging');
+    setDragIdx(null);
+    setDragOverIdx(null);
+    setDragOverSide(null);
+  };
+
+  // ---- 双击重命名 ----
+  const handleDoubleClick = (tab) => {
+    if (!tab.kind || tab.kind === 'request') {
+      setEditingTabId(tab.id);
+      setEditingName(tab.request.name || '未命名请求');
+    }
+  };
+
+  const handleRenameConfirm = (tab) => {
+    const trimmed = editingName.trim();
+    setEditingTabId(null);
+    if (trimmed && trimmed !== (tab.request.name || '未命名请求') && onRenameTab) {
+      onRenameTab(tab.id, trimmed);
+    }
+  };
+
   // 单个标签渲染（组内/组外通用，组色由容器 CSS 变量接管；固定标签显示 pin 图标、隐藏关闭按钮）
   const renderTab = (tab, pinned) => {
+    const tabIndex = tabs.indexOf(tab);
     const isReq = !tab.kind || tab.kind === 'request';
     const meta = isReq ? null : tabMeta(tab);
     const active = tab.id === activeTabId;
@@ -110,10 +191,15 @@ export default function TabBar({
       <div
         key={tab.id}
         data-tab-id={tab.id}
-        className={`tab-item ${active ? 'active' : ''} ${tab.groupId ? 'in-group' : ''} ${pinned ? 'pinned' : ''}`}
+        className={`tab-item ${active ? 'active' : ''} ${tab.groupId ? 'in-group' : ''} ${pinned ? 'pinned' : ''}${dragOverIdx === tabIndex && dragOverSide === 'left' ? ' drag-over-left' : ''}${dragOverIdx === tabIndex && dragOverSide === 'right' ? ' drag-over-right' : ''}`}
         title={pinned ? `已固定：${isReq ? (tab.request.url || tab.request.name) : meta.title}\n右键取消固定` : (isReq ? (tab.request.url || tab.request.name) : meta.title)}
         onClick={() => onSelect(tab.id)}
         onContextMenu={(e) => openMenu(e, { type: 'tab', tabId: tab.id })}
+        draggable="true"
+        onDragStart={(e) => handleDragStart(e, tabIndex)}
+        onDragOver={(e) => handleDragOver(e, tabIndex)}
+        onDrop={(e) => handleDrop(e, tabIndex)}
+        onDragEnd={handleDragEnd}
       >
         {pinned && <JbIcon name="pin" size={12} className="tab-pin" />}
         {isReq ? (
@@ -121,13 +207,28 @@ export default function TabBar({
         ) : (
           <JbIcon name={meta.icon} size={14} className="tab-icon" />
         )}
-        <span className="tab-name">{isReq ? (tab.request.name || '未命名请求') : meta.label}</span>
+        {editingTabId === tab.id ? (
+          <input
+            className="tab-rename-input"
+            value={editingName}
+            autoFocus
+            onChange={(e) => setEditingName(e.target.value)}
+            onBlur={() => handleRenameConfirm(tab)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRenameConfirm(tab);
+              if (e.key === 'Escape') setEditingTabId(null);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="tab-name" onDoubleClick={() => handleDoubleClick(tab)}>{isReq ? (tab.request.name || '未命名请求') : meta.label}</span>
+        )}
         {isReq && tab.sending && <span className="tab-sending" title="发送中" />}
         {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" />}
         {!pinned && (
           <span
             className="tab-close"
-            title="关闭标签页 (Ctrl+W)"
+            title="关闭标签页 (Ctrl+F4)"
             onClick={(e) => { e.stopPropagation(); onClose(tab.id); }}
           ><JbIcon name="close" size={12} /></span>
         )}
@@ -301,6 +402,9 @@ export default function TabBar({
             <div className="ctx-item" onClick={() => { onLeaveGroup(menuTab.id); setMenu(null); }}>从分组中移除</div>
           )}
           <div className="ctx-sep" />
+          {onCloneTab && (!menuTab.kind || menuTab.kind === 'request') && (
+            <div className="ctx-item" onClick={() => { onCloneTab(menuTab.id); setMenu(null); }}>复制为新标签</div>
+          )}
           <div className="ctx-item ctx-danger" onClick={() => { onClose(menuTab.id); setMenu(null); }}>关闭标签页</div>
           <div className="ctx-item ctx-danger" onClick={() => { onCloseToRight(menuTab.id); setMenu(null); }}>关闭右侧所有标签</div>
           <div className="ctx-item ctx-danger" onClick={() => { onCloseToLeft(menuTab.id); setMenu(null); }}>关闭左侧所有标签</div>

@@ -33,7 +33,7 @@ import {
 import { newEnvironment, buildVarMap, resolveRequest, mergeVariables } from './utils/envUtil.js';
 import { applyAutoGroups, pickGroupColor, reorderTabsByGroup } from './utils/tabGroupUtil.js';
 import { applyAuth } from './utils/authUtil.js';
-import { toCurl } from './utils/curlUtil.js';
+import { toCurl, parseCurl } from './utils/curlUtil.js';
 import { upsertCookies, pruneCookies } from './utils/cookieUtil.js';
 import { normalizeSettings, applyTheme } from './utils/themeUtil.js';
 import { exportPostmanCollection, exportMarkdownDocs } from './utils/exportUtil.js';
@@ -94,16 +94,23 @@ const DEFAULT_STATE = {
 
 /** 状态栏 ⌨ 快捷键速查表 */
 const SHORTCUTS = [
-  ['发送请求', 'Ctrl+Enter'],
-  ['全局搜索 / 命令', 'Ctrl+K'],
+  ['发送请求', 'Shift+F10'],
+  ['全局搜索 / 命令', 'Ctrl+Shift+A'],
   ['保存请求', 'Ctrl+S'],
   ['新建请求标签', 'Ctrl+T'],
-  ['关闭标签', 'Ctrl+W'],
+  ['关闭标签', 'Ctrl+F4'],
   ['复制当前请求标签', 'Ctrl+D'],
-  ['循环切换标签', 'Ctrl+Tab / Ctrl+Shift+Tab'],
+  ['切换到左侧标签', 'Alt+Left'],
+  ['切换到右侧标签', 'Alt+Right'],
   ['循环切换环境', 'Ctrl+E'],
-  ['快捷键速查', 'Ctrl+/'],
-  ['新建窗口', 'Ctrl+Shift+N']
+  ['新建窗口', 'Ctrl+Shift+N'],
+  ['切换侧边栏', 'Alt+1'],
+  ['搜索文件/请求', 'Ctrl+Shift+F'],
+  ['注释行', 'Ctrl+/'],
+  ['格式化代码', 'Ctrl+Alt+L'],
+  ['快捷键速查', 'F1'],
+  ['跳转到行', 'Ctrl+G'],
+  ['最近文件', 'Ctrl+E']
 ];
 
 export default function App() {
@@ -469,6 +476,16 @@ export default function App() {
   // ---- 环境相关 ----
   const activeEnv = environments.find((e) => e.id === activeEnvId) || null;
   const varNames = Object.keys(buildVarMap(activeEnv, globals));
+
+  // 去重后的历史 URL 列表（供 RequestBar 自动补全）
+  const urlHistory = React.useMemo(() => {
+    const seen = new Set();
+    return history.filter((h) => {
+      if (!h.url || seen.has(h.url)) return false;
+      seen.add(h.url);
+      return true;
+    }).map((h) => ({ url: h.url, method: h.method }));
+  }, [history]);
 
   /** 修改应用设置（主题/强调色/Cookie 开关）并即时应用主题 */
   const handleChangeSettings = (patch) => {
@@ -972,6 +989,18 @@ export default function App() {
     showToast('已复制为新标签', 'success');
   };
 
+  /** 右键菜单：复制指定标签为新标签，插入到原标签右侧并激活 */
+  const handleCloneTab = (tabId) => {
+    const srcTab = tabs.find((t) => t.id === tabId);
+    if (!srcTab || srcTab.kind !== 'request') return;
+    const req = normalizeRequest({ ...JSON.parse(JSON.stringify(srcTab.request)), id: uuid(), name: (srcTab.request.name || '未命名请求') + ' 副本' });
+    const tab = createTab(req);
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    setTabs((prev) => [...prev.slice(0, idx + 1), tab, ...prev.slice(idx + 1)]);
+    setActiveTabId(tab.id);
+    showToast('已复制为新标签', 'success');
+  };
+
   /** Ctrl+Tab / Ctrl+Shift+Tab：按标签栏顺序循环切换 */
   const handleCycleTab = (dir) => {
     if (tabs.length < 2) return;
@@ -1005,20 +1034,35 @@ export default function App() {
   };
   useEffect(() => {
     const onKey = (e) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const k = e.key.toLowerCase();
       const h = hotkeysRef.current;
-      if (k === 'enter') { e.preventDefault(); h.send(); }
-      else if (k === 'k' || (k === 'p' && e.shiftKey)) { e.preventDefault(); setPaletteOpen((v) => !v); }
-      else if (k === 's') { e.preventDefault(); h.save(); }
-      else if (k === 't') { e.preventDefault(); h.newTab(); }
-      else if (k === 'w') { e.preventDefault(); h.closeTab(); }
-      else if (k === 'd') { e.preventDefault(); h.dupTab(); }
-      else if (k === 'tab') { e.preventDefault(); h.cycleTab(e.shiftKey ? -1 : 1); }
-      else if (k === 'e') { e.preventDefault(); h.cycleEnv(); }
-      else if (k === 'b') { e.preventDefault(); setPanelOpen((v) => !v); }
-      else if (k === '/') { e.preventDefault(); setKbdOpen((v) => !v); }
-      else if (k === 'n' && e.shiftKey) { e.preventDefault(); window.api.newWindow(); }
+      const k = e.key;
+      const ctrl = e.ctrlKey || e.metaKey;
+      const shift = e.shiftKey;
+      const alt = e.altKey;
+
+      // Shift+F10: 发送请求
+      if (shift && !ctrl && !alt && k === 'F10') { e.preventDefault(); h.send(); }
+      // Ctrl+Shift+A: 命令面板（IDEA: Find Action）
+      else if (ctrl && shift && k.toLowerCase() === 'a') { e.preventDefault(); setPaletteOpen((v) => !v); }
+      // Ctrl+S: 保存
+      else if (ctrl && !shift && !alt && k.toLowerCase() === 's') { e.preventDefault(); h.save(); }
+      // Ctrl+T: 新建标签
+      else if (ctrl && !shift && !alt && k.toLowerCase() === 't') { e.preventDefault(); h.newTab(); }
+      // Ctrl+F4: 关闭标签（IDEA 风格）
+      else if (ctrl && !shift && !alt && k === 'F4') { e.preventDefault(); h.closeTab(); }
+      // Ctrl+D: 复制当前标签
+      else if (ctrl && !shift && !alt && k.toLowerCase() === 'd') { e.preventDefault(); h.dupTab(); }
+      // Alt+Left / Alt+Right: 切换标签（IDEA: Navigate tabs）
+      else if (alt && !ctrl && !shift && k === 'ArrowLeft') { e.preventDefault(); h.cycleTab(-1); }
+      else if (alt && !ctrl && !shift && k === 'ArrowRight') { e.preventDefault(); h.cycleTab(1); }
+      // Ctrl+E: 循环切换环境（IDEA: Recent Files）
+      else if (ctrl && !shift && !alt && k.toLowerCase() === 'e') { e.preventDefault(); h.cycleEnv(); }
+      // Alt+1: 切换侧边栏（IDEA: Tool Windows）
+      else if (alt && !ctrl && !shift && k === '1') { e.preventDefault(); setPanelOpen((v) => !v); }
+      // F1: 快捷键速查
+      else if (!ctrl && !shift && !alt && k === 'F1') { e.preventDefault(); setKbdOpen((v) => !v); }
+      // Ctrl+Shift+N: 新建窗口
+      else if (ctrl && shift && k.toLowerCase() === 'n') { e.preventDefault(); window.api.newWindow(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1410,6 +1454,15 @@ export default function App() {
     });
   };
 
+  /** 将断言代码追加到当前标签的后置脚本末尾 */
+  const handleInsertAssertion = (code) => {
+    const req = curTab.request;
+    const existing = req.postScript || '';
+    const newScript = existing ? existing.trimEnd() + '\n\n' + code : code;
+    setActiveRequest({ ...req, postScript: newScript });
+    showToast('已添加断言到后置脚本', 'success');
+  };
+
   /** 把当前响应体保存到文件（图片等二进制响应按原始字节写入） */
   const handleSaveResponseBody = async () => {
     const resp = curTab.response;
@@ -1550,6 +1603,46 @@ export default function App() {
     };
   }, []);
 
+  // ---- 全局 paste 事件：自动检测 cURL 命令并提示导入 ----
+  const handleCurlImportRef = useRef(null);
+  handleCurlImportRef.current = handleCurlImport;
+  useEffect(() => {
+    const onPaste = (e) => {
+      // 排除：焦点在 input/textarea/contenteditable/CodeMirror 编辑区时不触发
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        if (active.isContentEditable) return;
+        if (active.closest && active.closest('.cm-editor')) return;
+      }
+
+      const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      // 检测是否以 curl 或 curl.exe 开头（不区分大小写）
+      const isCurl = /^curl(\.exe)?\s/i.test(trimmed);
+      if (!isCurl) return;
+
+      // 弹出确认
+      setConfirm({
+        title: '检测到 cURL 命令',
+        message: '检测到 cURL 命令，是否导入为新请求？',
+        onConfirm: () => {
+          try {
+            const parsed = parseCurl(trimmed);
+            handleCurlImportRef.current(parsed);
+          } catch (err) {
+            showToast('cURL 解析失败：' + err.message, 'error');
+          }
+        }
+      });
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [showToast]);
+
   // 面包屑：当前请求在集合树中的路径（未保存的请求不显示）
   const breadcrumb = activeRequest ? findRequestPath(collections, activeRequest.id) : null;
 
@@ -1645,6 +1738,7 @@ export default function App() {
           isTabDirty={isTabDirty}
           onSelect={setActiveTabId}
           onClose={handleCloseTab}
+          onCloneTab={handleCloneTab}
           onNew={handleNewTab}
           onNewWs={() => handleNewRealtimeTab('ws')}
           onNewSse={() => handleNewRealtimeTab('sse')}
@@ -1702,6 +1796,7 @@ export default function App() {
               varNames={varNames}
               varMap={buildVarMap(activeEnv, globals)}
               activeEnv={activeEnv}
+              urlHistory={urlHistory}
               onChange={setActiveRequest}
               onSend={handleSend}
               onCancel={handleCancelSend}
@@ -1723,6 +1818,8 @@ export default function App() {
                     onExampleToMock={handleExampleToMock}
                     headerPresets={settings.headerPresets}
                     onChangeHeaderPresets={(p) => handleChangeSettings({ headerPresets: p })}
+                    paramPresets={settings.paramPresets}
+                    onChangeParamPresets={(p) => handleChangeSettings({ paramPresets: p })}
                   />
                   {/* 分栏拖拽手柄：上下布局调高度、左右布局调宽度；双击复位默认比例 */}
                   <div
@@ -1742,6 +1839,7 @@ export default function App() {
                 onSaveBody={handleSaveResponseBody}
                 onExtractVariable={handleExtractVariable}
                 onToast={showToast}
+                onInsertAssertion={handleInsertAssertion}
                 layout={settings.layout}
                 onToggleLayout={() => handleChangeSettings({ layout: settings.layout === 'vertical' ? 'horizontal' : 'vertical' })}
                 focused={focusResponse}

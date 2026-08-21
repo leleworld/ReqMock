@@ -4,6 +4,7 @@ import { JbIcon } from './Icons.jsx';
 import { maskFade, modalPop } from '../utils/motionPresets.js';
 import KeyValueEditor, { rowsToBulkText, bulkTextToRows } from './KeyValueEditor.jsx';
 import { newPresetId } from '../utils/headerPresets.js';
+import { newParamPresetId } from '../utils/paramPresets.js';
 import { parseCurl, parseRawHttp } from '../utils/curlUtil.js';
 import { AUTH_TYPES, normalizeAuth } from '../utils/authUtil.js';
 import { CODEGEN_LANGS, generateCode } from '../utils/codegenUtil.js';
@@ -386,7 +387,7 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
           <div className="settings-backup-hint">备份包含集合 / 环境 / 全局变量 / 历史 / Mock / Cookie / 设置；恢复将覆盖当前数据</div>
         </div>
       </div>
-      <div className="env-hint">快捷键：Ctrl+Enter 发送 · Ctrl+S 保存 · Ctrl+T 新建标签 · Ctrl+W 关闭标签 · Ctrl+Shift+N 新建窗口</div>
+      <div className="env-hint">快捷键：Shift+F10 发送 · Ctrl+S 保存 · Ctrl+T 新建标签 · Ctrl+F4 关闭标签 · Ctrl+Shift+N 新建窗口</div>
       <div className="about-block">
         <img className="about-logo" src="./icon.png" alt="" />
         <div className="about-meta">
@@ -411,6 +412,19 @@ export function HeaderPresetsModal({ presets, onChangePresets, onClose }) {
   const selected = presets.find((p) => p.id === selectedId) || null;
   const [name, setName] = useState('');
   const [text, setText] = useState('');
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
+  const handleDragEnd = () => {
+    if (dragIdx != null && dragOverIdx != null && dragIdx !== dragOverIdx) {
+      const next = [...presets];
+      const [item] = next.splice(dragIdx, 1);
+      next.splice(dragOverIdx, 0, item);
+      onChangePresets(next);
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
 
   const load = (p) => {
     setSelectedId(p.id);
@@ -440,13 +454,19 @@ export function HeaderPresetsModal({ presets, onChangePresets, onClose }) {
     <Modal title="管理请求头预设" onClose={onClose} width={560}>
       <div className="hp-layout">
         <div className="hp-list">
-          {presets.map((p) => (
+          {presets.map((p, idx) => (
             <div
               key={p.id}
-              className={`hp-item ${p.id === selectedId ? 'selected' : ''}`}
+              className={`hp-item ${p.id === selectedId ? 'selected' : ''} ${dragOverIdx === idx ? 'drag-over' : ''} ${dragIdx === idx ? 'dragging' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+              onDragLeave={() => { if (dragOverIdx === idx) setDragOverIdx(null); }}
+              onDrop={handleDragEnd}
               onClick={() => load(p)}
             >
-              <span className="hp-item-name">{p.name}{p.builtIn && <span className="hp-builtin-tag">内置</span>}</span>
+              <span className="hp-item-name">
+                <span className="hp-drag-handle" title="拖拽排序" draggable onDragStart={() => setDragIdx(idx)} onDragEnd={handleDragEnd}>⠿</span>
+                {p.name}{p.builtIn && <span className="hp-builtin-tag">内置</span>}
+              </span>
               <span className="hp-item-count">{p.rows.length} 项</span>
               <span className="item-delete" title="删除该预设" onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}>×</span>
             </div>
@@ -471,6 +491,104 @@ export function HeaderPresetsModal({ presets, onChangePresets, onClose }) {
               disabled={!name.trim() || !bulkTextToRows(text).some((r) => r.key)}
               onClick={handleSave}
             >{selected ? '保存修改' : '添加预设'}</button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** 参数预设管理弹窗（与 HeaderPresetsModal 结构一致） */
+export function ParamPresetsModal({ presets, onChangePresets, onClose }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = presets.find((p) => p.id === selectedId) || null;
+  const [name, setName] = useState('');
+  const [text, setText] = useState('');
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+
+  const handleDragEnd = () => {
+    if (dragIdx != null && dragOverIdx != null && dragIdx !== dragOverIdx) {
+      const next = [...presets];
+      const [item] = next.splice(dragIdx, 1);
+      next.splice(dragOverIdx, 0, item);
+      onChangePresets(next);
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const load = (p) => {
+    setSelectedId(p.id);
+    setName(p.name);
+    setText(p.rows.map((r) => `${r.enabled === false ? '# ' : ''}${r.key}=${r.value}`).join('\n'));
+  };
+  const resetNew = () => { setSelectedId(null); setName(''); setText(''); };
+
+  const parseRows = (t) => t.split('\n').map((line) => {
+    const disabled = line.startsWith('#');
+    const clean = disabled ? line.slice(1).trim() : line.trim();
+    const idx = clean.indexOf('=');
+    if (idx < 0) return { key: clean, value: '', enabled: !disabled };
+    return { key: clean.slice(0, idx).trim(), value: clean.slice(idx + 1).trim(), enabled: !disabled };
+  }).filter((r) => r.key);
+
+  const handleSave = () => {
+    const rows = parseRows(text);
+    const trimmed = name.trim();
+    if (!trimmed || rows.length === 0) return;
+    if (selected) {
+      onChangePresets(presets.map((p) => (p.id === selected.id ? { ...p, name: trimmed, rows } : p)));
+    } else {
+      onChangePresets([...presets, { id: newParamPresetId(), name: trimmed, builtIn: false, rows }]);
+    }
+    resetNew();
+  };
+
+  const handleDelete = (id) => {
+    onChangePresets(presets.filter((p) => p.id !== id));
+    if (selectedId === id) resetNew();
+  };
+
+  return (
+    <Modal title="管理参数预设" onClose={onClose} width={560}>
+      <div className="hp-layout">
+        <div className="hp-list">
+          {presets.map((p, idx) => (
+            <div
+              key={p.id}
+              className={`hp-item ${p.id === selectedId ? 'selected' : ''} ${dragOverIdx === idx ? 'drag-over' : ''} ${dragIdx === idx ? 'dragging' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverIdx(idx); }}
+              onDragLeave={() => { if (dragOverIdx === idx) setDragOverIdx(null); }}
+              onDrop={handleDragEnd}
+              onClick={() => load(p)}
+            >
+              <span className="hp-item-name">
+                <span className="hp-drag-handle" title="拖拽排序" draggable onDragStart={() => setDragIdx(idx)} onDragEnd={handleDragEnd}>⠿</span>
+                {p.name}{p.builtIn && <span className="hp-builtin-tag">内置</span>}
+              </span>
+              <span className="hp-item-count">{p.rows.length} 项</span>
+              <span className="item-delete" title="删除该预设" onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}>×</span>
+            </div>
+          ))}
+          <button className={`btn-block hp-new ${selectedId === null ? 'selected' : ''}`} onClick={resetNew}>+ 新建预设</button>
+        </div>
+        <div className="hp-edit">
+          <span className="modal-label">预设名称</span>
+          <input className="modal-input" placeholder="例如：分页参数" value={name} onChange={(e) => setName(e.target.value)} />
+          <span className="modal-label">参数（每行一条 key=value，行首 # 表示禁用）</span>
+          <textarea
+            className="modal-textarea"
+            placeholder={'page=1\npageSize=20'}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+          />
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={onClose}>关闭</button>
+            <button className="btn-primary" disabled={!name.trim() || !parseRows(text).length} onClick={handleSave}>
+              {selected ? '保存修改' : '添加预设'}
+            </button>
           </div>
         </div>
       </div>

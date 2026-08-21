@@ -1,6 +1,7 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { collectRunnableRequests, parseRunnerData, runCollection, exportRunReport } from '../utils/runnerUtil.js';
 import { findNode } from '../utils/collectionUtil.js';
+import { executeRequest } from '../utils/requestPipeline.js';
 import { JbIcon } from './Icons.jsx';
 
 /**
@@ -16,6 +17,7 @@ export default function RunnerPanel(props) {
   const [selected, setSelected] = useState(() => new Set(items.map((it) => it.request.id)));
   const [iterations, setIterations] = useState(1);
   const [delayMs, setDelayMs] = useState(0);
+  const [concurrency, setConcurrency] = useState(1);
   const [dataRows, setDataRows] = useState([]);
   const [dataName, setDataName] = useState('');
   const [running, setRunning] = useState(false);
@@ -23,6 +25,7 @@ export default function RunnerPanel(props) {
   const [summary, setSummary] = useState(null);
   const [filter, setFilter] = useState('all'); // all | failed
   const stopRef = useRef(false);
+  const startTimeRef = useRef(null);
 
   if (!node) {
     return <div className="response-placeholder">目标集合/文件夹已删除</div>;
@@ -56,6 +59,79 @@ export default function RunnerPanel(props) {
     }
   };
 
+  /**
+   * 并发池执行：维护一个 running Set，每当有请求完成就从队列中取下一个执行。
+   * 结果按原始顺序排列。
+   */
+  const runConcurrent = useCallback(async (runItems, ctx) => {
+    const totalIterations = dataRows.length > 0 ? dataRows.length : Math.max(1, iterations);
+    // 构造扁平任务队列：[{iter, idx, request, path}]
+    const queue = [];
+    for (let iter = 0; iter < totalIterations; iter++) {
+      const rowVars = dataRows.length > 0 ? dataRows[iter] : {};
+      for (let idx = 0; idx < runItems.length; idx++) {
+        queue.push({ iter, idx, request: runItems[idx].request, path: runItems[idx].path, rowVars });
+      }
+    }
+    const results = new Array(queue.length);
+    let nextIndex = 0;
+    let doneCount = 0;
+
+    const runNext = async () => {
+      while (nextIndex < queue.length) {
+        if (stopRef.current) return;
+        const myIndex = nextIndex++;
+        const task = queue[myIndex];
+        const iterVarMap = { ...ctx.varMap, ...task.rowVars };
+        const started = Date.now();
+        let entry;
+        try {
+          const r = await executeRequest(task.request, { ...ctx, varMap: iterVarMap });
+          const failedTests = r.tests.filter((t) => !t.passed);
+          entry = {
+            iteration: task.iter + 1,
+            requestId: task.request.id,
+            name: task.request.name || task.request.url,
+            method: task.request.method,
+            url: r.finalReq.url,
+            path: task.path,
+            ok: r.result.ok,
+            status: r.result.ok ? r.result.status : 'ERR',
+            timeMs: r.result.timeMs ?? (Date.now() - started),
+            sizeBytes: r.result.sizeBytes,
+            error: r.result.ok ? null : (r.result.error || '未知错误'),
+            tests: r.tests,
+            scriptErrors: r.errors,
+            passed: r.result.ok && failedTests.length === 0 && r.errors.length === 0
+          };
+        } catch (e) {
+          entry = {
+            iteration: task.iter + 1,
+            requestId: task.request.id,
+            name: task.request.name || task.request.url,
+            method: task.request.method,
+            url: task.request.url,
+            path: task.path,
+            ok: false, status: 'ERR',
+            timeMs: Date.now() - started, sizeBytes: null,
+            error: e.message, tests: [], scriptErrors: [e.message], passed: false
+          };
+        }
+        results[myIndex] = entry;
+        doneCount++;
+        // 按原始顺序输出已连续完成的条目
+        setEntries(results.slice(0, doneCount).filter(Boolean));
+      }
+    };
+
+    const workers = [];
+    for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
+      workers.push(runNext());
+    }
+    await Promise.all(workers);
+    return results.filter(Boolean);
+  }, [concurrency, dataRows, iterations]);
+
   const handleRun = async () => {
     const runItems = items.filter((it) => selected.has(it.request.id));
     if (runItems.length === 0) {
@@ -66,16 +142,38 @@ export default function RunnerPanel(props) {
     setRunning(true);
     setEntries([]);
     setSummary(null);
-    const r = await runCollection({
-      items: runItems,
-      iterations,
-      dataRows,
-      delayMs,
-      ctx: buildCtx(),
-      onProgress: (entry) => setEntries((prev) => [...prev, entry]),
-      shouldStop: () => stopRef.current
-    });
-    setSummary(r.summary);
+    startTimeRef.current = Date.now();
+
+    if (concurrency > 1) {
+      // 并发模式
+      const allEntries = await runConcurrent(runItems, buildCtx());
+      const testsTotal = allEntries.reduce((s, e) => s + e.tests.length, 0);
+      const testsPassed = allEntries.reduce((s, e) => s + e.tests.filter((t) => t.passed).length, 0);
+      const totalTimeMs = Date.now() - startTimeRef.current;
+      setSummary({
+        total: allEntries.length,
+        passed: allEntries.filter((e) => e.passed).length,
+        failed: allEntries.filter((e) => !e.passed).length,
+        testsTotal,
+        testsPassed,
+        testsFailed: testsTotal - testsPassed,
+        totalTimeMs,
+        stopped: stopRef.current,
+        iterations: dataRows.length > 0 ? dataRows.length : Math.max(1, iterations)
+      });
+    } else {
+      // 串行模式（保持原逻辑）
+      const r = await runCollection({
+        items: runItems,
+        iterations,
+        dataRows,
+        delayMs,
+        ctx: buildCtx(),
+        onProgress: (entry) => setEntries((prev) => [...prev, entry]),
+        shouldStop: () => stopRef.current
+      });
+      setSummary(r.summary);
+    }
     setRunning(false);
   };
 
@@ -136,7 +234,15 @@ export default function RunnerPanel(props) {
           <input
             className="num-input" type="number" min={0}
             value={delayMs} disabled={running}
-            onChange={(e) => setDelayMs(Math.max(0, parseInt(e.target.value, 10) || 0))}
+          onChange={(e) => setDelayMs(Math.max(0, parseInt(e.target.value, 10) || 0))}
+          />
+        </label>
+        <label className="inline-label runner-opt">
+          并发数
+          <input
+            className="num-input concurrency-input" type="number" min={1} max={10}
+            value={concurrency} disabled={running}
+            onChange={(e) => setConcurrency(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
           />
         </label>
         <div className="runner-opt runner-data-row">

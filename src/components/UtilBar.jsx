@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 
@@ -9,13 +9,43 @@ import { JbIcon } from './Icons.jsx';
  */
 export default function UtilBar({
   isRequestTab, request, onChangeRequest,
-  onCodegen, onCopyCurl, varMap, activeEnvName
+  onCodegen, onCopyCurl, varMap, activeEnvName,
+  environments, activeEnvId, onSelectEnv
 }) {
   // 当前展开的抽屉：'doc' | 'vars' | null
   const [drawer, setDrawer] = useState(null);
+  // 环境快速切换下拉
+  const [envDropdown, setEnvDropdown] = useState(false);
+  const [hoveredEnvId, setHoveredEnvId] = useState(null);
+  const envDropdownRef = useRef(null);
   const toggle = (key) => setDrawer(drawer === key ? null : key);
 
   const varEntries = Object.entries(varMap || {});
+
+  // 点击外部关闭环境下拉
+  useEffect(() => {
+    if (!envDropdown) return;
+    const onMouseDown = (e) => {
+      if (envDropdownRef.current && !envDropdownRef.current.contains(e.target)) {
+        setEnvDropdown(false);
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setEnvDropdown(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [envDropdown]);
+
+  /** 获取环境变量前5个用于 tooltip 预览 */
+  const getEnvPreview = (env) => {
+    if (!env || !env.variables || env.variables.length === 0) return '(无变量)';
+    return env.variables.slice(0, 5).map((v) => `${v.key}=${v.value || ''}`).join('\n');
+  };
 
   return (
     <>
@@ -66,6 +96,41 @@ export default function UtilBar({
       </AnimatePresence>
 
       <div className="util-bar">
+        {/* 环境快速切换下拉 */}
+        <div className="env-quick-switch" ref={envDropdownRef}>
+          <button
+            className="util-btn env-quick-switch-trigger"
+            title="快速切换环境"
+            onClick={() => setEnvDropdown(!envDropdown)}
+          >
+            <span className="util-icon"><JbIcon name="earth" size={14} /></span>
+            <span className="util-label">{activeEnvName || '无环境'}</span>
+            <span className="env-quick-switch-arrow">{envDropdown ? '▾' : '▴'}</span>
+          </button>
+          {envDropdown && (
+            <div className="env-quick-switch-dropdown">
+              <div
+                className={`env-quick-switch-item ${!activeEnvId ? 'active' : ''}`}
+                onClick={() => { onSelectEnv(null); setEnvDropdown(false); }}
+              >
+                <span className="env-quick-switch-item-name">无环境</span>
+              </div>
+              {(environments || []).map((env) => (
+                <div
+                  key={env.id}
+                  className={`env-quick-switch-item ${env.id === activeEnvId ? 'active' : ''}`}
+                  title={getEnvPreview(env)}
+                  onClick={() => { onSelectEnv(env.id); setEnvDropdown(false); }}
+                  onMouseEnter={() => setHoveredEnvId(env.id)}
+                  onMouseLeave={() => setHoveredEnvId(null)}
+                >
+                  <span className="env-quick-switch-item-name">{env.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           className="util-btn"
           disabled={!isRequestTab}

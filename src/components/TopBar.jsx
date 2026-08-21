@@ -44,8 +44,8 @@ function buildMenus(handlers) {
       key: 'view', label: '视图', items: [
         { label: '切换请求/响应布局', onClick: handlers.onToggleLayout },
         { label: '切换控制台', onClick: handlers.onToggleConsole },
-        { label: '切换侧栏', kbd: 'Ctrl+B', onClick: handlers.onToggleSidebar },
-        { label: '命令面板', kbd: 'Ctrl+K', onClick: handlers.onOpenPalette },
+        { label: '切换侧栏', kbd: 'Alt+1', onClick: handlers.onToggleSidebar },
+        { label: '命令面板', kbd: 'Ctrl+Shift+A', onClick: handlers.onOpenPalette },
         { sep: true },
         { label: '开发者工具', onClick: () => window.api.toggleDevtools() }
       ]
@@ -60,7 +60,7 @@ function buildMenus(handlers) {
     },
     {
       key: 'help', label: '帮助', items: [
-        { label: '快捷键速查', kbd: 'Ctrl+/', onClick: handlers.onKbd },
+        { label: '快捷键速查', kbd: 'F1', onClick: handlers.onKbd },
         { label: '欢迎与入门', onClick: handlers.onOpenWelcome },
         { sep: true },
         { label: '检查更新…', icon: 'update', onClick: handlers.onCheckUpdate },

@@ -169,6 +169,83 @@ export function moveRequest(collections, reqId, targetNodeId, beforeReqId = null
 }
 
 /**
+ * 拖拽移动文件夹：从原位置摘除后插入目标集合/文件夹内，可指定插入到某文件夹之前。
+ * 防止将文件夹移入自身子树。目标节点不存在或文件夹未找到时返回原树。
+ */
+export function moveFolder(collections, folderId, targetNodeId, beforeFolderId = null) {
+  // 防止移入自身
+  if (folderId === targetNodeId) return collections;
+  // 检查 targetNodeId 是否是 folderId 的子孙
+  const srcNode = findNode(collections, folderId);
+  if (!srcNode) return collections;
+  if (findNode(srcNode.folders || [], targetNodeId)) return collections;
+
+  let moved = null;
+  const strip = (node) => {
+    let folders = node.folders || [];
+    const idx = folders.findIndex((f) => f.id === folderId);
+    if (idx >= 0) {
+      moved = folders[idx];
+      folders = folders.filter((f) => f.id !== folderId);
+    } else {
+      folders = folders.map(strip);
+    }
+    return { ...node, folders };
+  };
+  let stripped = collections.map(strip);
+  // 顶层集合也可能是被摘除的对象（但集合不应被移动，此处仅处理文件夹）
+  if (!moved) return collections;
+  if (!findNode(stripped, targetNodeId)) return collections;
+
+  const insert = (node) => {
+    if (node.id !== targetNodeId) {
+      return { ...node, folders: (node.folders || []).map(insert) };
+    }
+    const folders = [...(node.folders || [])];
+    const bi = beforeFolderId ? folders.findIndex((f) => f.id === beforeFolderId) : -1;
+    if (bi >= 0) folders.splice(bi, 0, moved);
+    else folders.push(moved);
+    return { ...node, folders };
+  };
+  return stripped.map(insert);
+}
+
+/**
+ * 对同级请求重新排序：将请求移到同一父节点中另一请求的前面或后面。
+ * position: 'before' | 'after'
+ */
+export function reorderRequest(collections, reqId, targetNodeId, anchorReqId, position = 'before') {
+  if (reqId === anchorReqId) return collections;
+  let moved = null;
+  const strip = (node) => {
+    let requests = node.requests || [];
+    const idx = requests.findIndex((r) => r.id === reqId);
+    if (idx >= 0) {
+      moved = requests[idx];
+      requests = requests.filter((r) => r.id !== reqId);
+    }
+    return { ...node, requests, folders: (node.folders || []).map(strip) };
+  };
+  const stripped = collections.map(strip);
+  if (!moved || !findNode(stripped, targetNodeId)) return collections;
+  const insert = (node) => {
+    if (node.id !== targetNodeId) {
+      return { ...node, folders: (node.folders || []).map(insert) };
+    }
+    const requests = [...(node.requests || [])];
+    const ai = requests.findIndex((r) => r.id === anchorReqId);
+    if (ai >= 0) {
+      const insertAt = position === 'after' ? ai + 1 : ai;
+      requests.splice(insertAt, 0, moved);
+    } else {
+      requests.push(moved);
+    }
+    return { ...node, requests };
+  };
+  return stripped.map(insert);
+}
+
+/**
  * 查找请求所属的集合（用于合并集合级 Headers）
  */
 export function findOwnerCollection(collections, reqId) {

@@ -6,6 +6,11 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, screen } = require('el
 const path = require('path');
 const fs = require('fs');
 
+// RDP/VM 环境 GPU 进程 DLL 缺失修复（exit_code=-1073741515）
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('no-sandbox');
+
 // GPU 加速自适应：检测上次是否因 GPU 崩溃退出，是则本次禁用 GPU
 const gpuCrashFlag = path.join(app.getPath('userData'), '.gpu-crash');
 if (fs.existsSync(gpuCrashFlag)) {

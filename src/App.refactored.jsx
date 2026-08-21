@@ -796,6 +796,9 @@ function AppShell() {
   const handleMoveRequest = (reqId, targetNodeId, beforeReqId = null) => {
     appDispatch({ type: APP_ACTIONS.MOVE_REQUEST, payload: { reqId, targetNodeId, beforeReqId } });
   };
+  const handleMoveFolder = (folderId, targetNodeId, beforeFolderId = null) => {
+    appDispatch({ type: APP_ACTIONS.MOVE_FOLDER, payload: { folderId, targetNodeId, beforeFolderId } });
+  };
   const handleOpenRunner = (nodeId) => openPageTab('runner', { nodeId });
   const handleSettingsConfirm = (colId, patch) => {
     appDispatch({ type: APP_ACTIONS.UPDATE_NODE, payload: { nodeId: colId, updater: (node) => ({ ...node, ...patch }) } });
@@ -1102,7 +1105,7 @@ function AppShell() {
           activeRequestId={activeRequest ? activeRequest.id : null}
           onOpenRequest={handleOpenRequest} onOpenHistory={handleOpenHistoryItem}
           onDeleteHistory={handleDeleteHistoryItem} onClearHistory={handleClearHistory}
-          onCopyHistoryCurl={handleCopyHistoryCurl} onMoveRequest={handleMoveRequest}
+          onCopyHistoryCurl={handleCopyHistoryCurl} onMoveRequest={handleMoveRequest} onMoveFolder={handleMoveFolder}
           onDeleteRequest={handleDeleteRequest} onNewRequest={handleNewTab}
           onNewCollection={handleNewCollection} onAddFolder={handleAddFolder}
           onRenameNode={handleRenameNode} onDeleteFolder={handleDeleteFolder}

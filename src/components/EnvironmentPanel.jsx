@@ -8,6 +8,49 @@ import { buildVarMap } from '../utils/envUtil.js';
 const ENV_COLORS = ['#e5534b', '#e8a03e', '#3fb28f', '#4f8cf7', '#a06bd8', '#d85f9c'];
 
 /**
+ * 解析 .env 文件内容为 [{key, value}] 数组
+ * 规则：忽略空行和 # 注释行；KEY=value 格式；支持双引号/单引号包裹值（去引号）
+ */
+function parseDotEnv(text) {
+  const lines = text.split(/\r?\n/);
+  const result = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eqIdx = line.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = line.slice(0, eqIdx).trim();
+    let value = line.slice(eqIdx + 1).trim();
+    // 去掉引号包裹
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    result.push({ key, value });
+  }
+  return result;
+}
+
+/**
+ * 将环境变量数组序列化为 .env 格式文本
+ */
+function serializeDotEnv(variables) {
+  return (variables || [])
+    .filter((v) => v.enabled !== false && v.key)
+    .map((v) => {
+      const val = v.value || '';
+      // 含空格或特殊字符时用双引号包裹
+      const needsQuote = /\s/.test(val);
+      return `${v.key}=${needsQuote ? `"${val}"` : val}`;
+    })
+    .join('\n');
+}
+
+/** 生成唯一 id */
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+/**
  * 环境编辑面板（主区域）：环境名称 + 警示色 + 变量键值表；isGlobal 时为全局变量模式
  * 生效预览：展示与全局变量/激活环境合并后最终生效的变量值及来源
  */
@@ -80,6 +123,35 @@ export default function EnvironmentPanel({ environment, isActive, isGlobal, glob
         {onExport && (
           <button className="btn-secondary" title="导出为 JSON 文件" onClick={() => onExport(environment)}>导出</button>
         )}
+        <button
+          className="btn-secondary btn-env-file"
+          title="导入 .env 文件，合并到当前环境变量（同名覆盖）"
+          onClick={async () => {
+            const res = await window.api.importFile({ filters: [{ name: '.env', extensions: ['env', 'txt', '*'] }] });
+            if (!res || !res.content) return;
+            const parsed = parseDotEnv(res.content);
+            if (parsed.length === 0) return;
+            const vars = [...(environment.variables || [])];
+            for (const item of parsed) {
+              const idx = vars.findIndex((v) => v.key === item.key);
+              if (idx >= 0) {
+                vars[idx] = { ...vars[idx], value: item.value, enabled: true };
+              } else {
+                vars.push({ id: uid(), key: item.key, value: item.value, enabled: true });
+              }
+            }
+            onChange({ ...environment, variables: vars });
+          }}
+        >导入 .env</button>
+        <button
+          className="btn-secondary btn-env-file"
+          title="导出当前环境变量为 .env 格式文件"
+          onClick={async () => {
+            const content = serializeDotEnv(environment.variables);
+            const defaultName = `${environment.name || 'env'}.env`;
+            await window.api.exportFile({ content, defaultName, filters: [{ name: '.env', extensions: ['env'] }] });
+          }}
+        >导出 .env</button>
         {!isGlobal && (
           <button className="btn-secondary btn-danger" onClick={() => onDelete(environment.id)}>删除环境</button>
         )}

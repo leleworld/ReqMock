@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import VarInput from './VarInput.jsx';
@@ -22,25 +22,60 @@ function fmtTime(ts) {
   return d.toLocaleTimeString('en-GB') + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+/** 高亮匹配关键字：将文本中匹配 keyword 的部分用 <mark> 包裹 */
+function HighlightText({ text, keyword }) {
+  if (!keyword) return <>{text}</>;
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(regex);
+  // split with capturing group: even indices = non-match, odd indices = match
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? <mark key={i} className="ws-search-hit">{part}</mark> : part
+      )}
+    </>
+  );
+}
+
 /** WS / SSE 共用消息时间线：方向标记 + 时间 + 内容（新消息在底部，自动跟随滚动） */
-export function RtTimeline({ events, emptyHint }) {
+export function RtTimeline({ events, emptyHint, filterText, filterType }) {
   const listRef = useRef(null);
+
+  // 根据 filterText 和 filterType 过滤消息
+  const filteredEvents = useMemo(() => {
+    let list = events;
+    if (filterType === 'sent') {
+      list = list.filter((evt) => evt.direction === 'out');
+    } else if (filterType === 'received') {
+      list = list.filter((evt) => evt.direction === 'in');
+    }
+    if (filterText) {
+      const kw = filterText.toLowerCase();
+      list = list.filter((evt) => {
+        const data = String(evt.data ?? '').toLowerCase();
+        return data.includes(kw);
+      });
+    }
+    return list;
+  }, [events, filterText, filterType]);
+
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [events.length]);
+  }, [filteredEvents.length]);
 
   return (
     <div className="rt-timeline" ref={listRef}>
-      {events.length === 0 && <div className="empty-hint">{emptyHint}</div>}
-      {events.map((evt, i) => (
+      {filteredEvents.length === 0 && <div className="empty-hint">{filterText || filterType !== 'all' ? '无匹配消息' : emptyHint}</div>}
+      {filteredEvents.map((evt, i) => (
         <motion.div key={i} className={`rt-msg rt-msg-${evt.direction}${evt.type !== 'message' ? ' rt-msg-sys' : ''}`} {...tabIn}>
           <span className="rt-msg-dir" title={evt.direction === 'out' ? '发送' : evt.direction === 'in' ? '接收' : '状态'}>
             {evt.direction === 'out' ? '↑' : evt.direction === 'in' ? '↓' : '◦'}
           </span>
           <span className="rt-msg-time">{fmtTime(evt.time)}</span>
           {evt.event && evt.event !== 'message' && <span className="rt-msg-event">{evt.event}</span>}
-          <pre className="rt-msg-data">{formatRtData(evt.data)}</pre>
+          <pre className="rt-msg-data"><HighlightText text={formatRtData(evt.data)} keyword={filterText} /></pre>
         </motion.div>
       ))}
     </div>
@@ -55,6 +90,8 @@ export default function WsPanel({ tabId, config, state, varNames = [], varMap = 
   const connected = !!(state && state.connected);
   const events = (state && state.events) || [];
   const [draft, setDraft] = useState('');
+  const [filterText, setFilterText] = useState('');
+  const [filterType, setFilterType] = useState('all');
   const set = (patch) => onChangeConfig({ ...config, ...patch });
 
   const handleConnect = async () => {
@@ -125,9 +162,22 @@ export default function WsPanel({ tabId, config, state, varNames = [], varMap = 
           <div className="rt-timeline-head">
             <span className="script-title">消息（{events.length}）</span>
             <span className="flex-spacer" />
+            <button className="btn-text" onClick={() => { setFilterText(''); setFilterType('all'); }}>重置</button>
             <button className="btn-text" onClick={onClear}>清空</button>
           </div>
-          <RtTimeline events={events} emptyHint="尚无消息，连接后开始记录收发内容" />
+          <div className="ws-search-bar body-search-bar">
+            <input
+              className="body-search-input"
+              placeholder="搜索消息内容…"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              spellCheck={false}
+            />
+            <button className={`search-toggle ${filterType === 'all' ? 'on' : ''}`} onClick={() => setFilterType('all')}>全部</button>
+            <button className={`search-toggle ${filterType === 'sent' ? 'on' : ''}`} onClick={() => setFilterType('sent')}>↑ 发送</button>
+            <button className={`search-toggle ${filterType === 'received' ? 'on' : ''}`} onClick={() => setFilterType('received')}>↓ 接收</button>
+          </div>
+          <RtTimeline events={events} emptyHint="尚无消息，连接后开始记录收发内容" filterText={filterText} filterType={filterType} />
           <div className="rt-send">
             <textarea
               className="rt-send-input"

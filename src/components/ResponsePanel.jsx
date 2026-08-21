@@ -37,7 +37,7 @@ export default function ResponsePanel({
   response, sending, scriptResult, onResponseToMock, onToast,
   layout, onToggleLayout, focused, onToggleFocus, historyList = [], onSelectHistory,
   onRetry, onRetryNoSsl, onOpenConsole,
-  onSaveExample, onSaveBody, onExtractVariable
+  onSaveExample, onSaveBody, onExtractVariable, onInsertAssertion
 }) {
   const [tab, setTab] = useState('body');
   const [view, setView] = useState('pretty');
@@ -275,15 +275,15 @@ export default function ResponsePanel({
     return (
       <div className="response-panel">
         <div className="response-corner">{cornerActions}</div>
-        <div className="response-placeholder">
-          <div className="loading-box" aria-busy="true">
-            <div className="skel-group" aria-hidden="true">
-              <span className="skel-line skel-w1" />
-              <span className="skel-line skel-w2" />
-              <span className="skel-line skel-w3" />
-              <span className="skel-line skel-w1" />
-            </div>
-            <span className="loading-text">请求发送中…</span>
+        <div className="response-placeholder" aria-busy="true">
+          <div className="resp-skeleton">
+            <div className="skel-line w60" />
+            <div className="skel-line w90" style={{marginLeft: 16}} />
+            <div className="skel-line w75" style={{marginLeft: 16}} />
+            <div className="skel-line w40" style={{marginLeft: 32}} />
+            <div className="skel-line w85" style={{marginLeft: 32}} />
+            <div className="skel-line w55" style={{marginLeft: 16}} />
+            <div className="skel-line w30" />
           </div>
         </div>
       </div>
@@ -565,7 +565,7 @@ export default function ResponsePanel({
         {tab === 'body' && view === 'tree' && (
           <DeferredMount>
             {parsedJson.ok
-              ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onToast={onToast} /></div>
+              ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onInsertAssertion={onInsertAssertion} onToast={onToast} /></div>
               : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>}
           </DeferredMount>
         )}
@@ -761,7 +761,24 @@ function getByPath(data, path) {
   return cur;
 }
 
-function JsonTree({ data, onExtractVariable, onToast }) {
+/** 将内部路径 $.data.list.0.name 转为 JS 访问路径 data.list[0].name */
+function pathToAccessor(internalPath) {
+  if (internalPath === '$') return '';
+  const parts = internalPath.slice(2).split('.');
+  let result = '';
+  for (const p of parts) {
+    if (/^\d+$/.test(p)) {
+      result += `[${p}]`;
+    } else if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(p)) {
+      result += (result ? '.' : '') + p;
+    } else {
+      result += `["${p.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
+    }
+  }
+  return result;
+}
+
+function JsonTree({ data, onExtractVariable, onInsertAssertion, onToast }) {
   const scrollRef = useRef(null);
   const expandedRef = useRef(new Set());
   const [, setTick] = useState(0);
@@ -909,6 +926,48 @@ function JsonTree({ data, onExtractVariable, onToast }) {
                 setMenu(null);
               }}
             >提取为环境变量…</div>
+          )}
+          {onInsertAssertion && menu.path !== '$' && (
+            <>
+              <div className="ctx-sep" />
+              {menuIsLeaf && (
+                <div
+                  className="ctx-item"
+                  onClick={() => {
+                    const accessor = pathToAccessor(menu.path);
+                    const val = menuValue;
+                    const valStr = typeof val === 'string' ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'` : String(val);
+                    const lastKey = menu.path.split('.').pop();
+                    const label = /^\d+$/.test(lastKey) ? accessor : lastKey;
+                    const code = `rm.test('${label} 应为 ${typeof val === 'string' ? val.slice(0, 20) : val}', () => {\n  rm.expect(rm.response.json().${accessor}).toBe(${valStr});\n});`;
+                    onInsertAssertion(code);
+                    setMenu(null);
+                  }}
+                >断言此字段值</div>
+              )}
+              <div
+                className="ctx-item"
+                onClick={() => {
+                  const accessor = pathToAccessor(menu.path);
+                  const code = `rm.test('应包含 ${accessor}', () => {\n  rm.expect(rm.response.json().${accessor}).toBeDefined();\n});`;
+                  onInsertAssertion(code);
+                  setMenu(null);
+                }}
+              >断言字段存在</div>
+              {menuIsLeaf && (
+                <div
+                  className="ctx-item"
+                  onClick={() => {
+                    const accessor = pathToAccessor(menu.path);
+                    const val = menuValue;
+                    const typeStr = val === null ? 'object' : typeof val;
+                    const code = `rm.test('${accessor} 应为 ${typeStr}', () => {\n  rm.expect(typeof rm.response.json().${accessor}).toBe('${typeStr}');\n});`;
+                    onInsertAssertion(code);
+                    setMenu(null);
+                  }}
+                >断言字段类型</div>
+              )}
+            </>
           )}
         </div>
       )}

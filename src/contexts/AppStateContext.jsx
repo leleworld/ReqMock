@@ -9,7 +9,7 @@ import React, { createContext, useContext, useReducer, useCallback, useMemo } fr
 import {
   newCollection, normalizeNode, updateNode, removeNode,
   findNode, upsertRequestById, removeRequestById, moveRequest,
-  findRequestById
+  findRequestById, moveFolder
 } from '../utils/collectionUtil.js';
 import { newEnvironment, buildVarMap, mergeVariables } from '../utils/envUtil.js';
 import { pruneCookies } from '../utils/cookieUtil.js';
@@ -26,6 +26,7 @@ export const APP_ACTIONS = {
   REMOVE_REQUEST: 'REMOVE_REQUEST',
   UPSERT_REQUEST: 'UPSERT_REQUEST',
   MOVE_REQUEST: 'MOVE_REQUEST',
+  MOVE_FOLDER: 'MOVE_FOLDER',
   // 环境操作
   SET_ENVIRONMENTS: 'SET_ENVIRONMENTS',
   ADD_ENVIRONMENT: 'ADD_ENVIRONMENT',
@@ -101,6 +102,17 @@ export function appStateReducer(state, action) {
           action.payload.reqId,
           action.payload.targetNodeId,
           action.payload.beforeReqId
+        ),
+      };
+
+    case APP_ACTIONS.MOVE_FOLDER:
+      return {
+        ...state,
+        collections: moveFolder(
+          state.collections,
+          action.payload.folderId,
+          action.payload.targetNodeId,
+          action.payload.beforeFolderId
         ),
       };
 

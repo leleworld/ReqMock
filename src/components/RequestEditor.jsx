@@ -13,23 +13,148 @@ import { paneSlide } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
 import { resolveVars } from '../utils/envUtil.js';
 import { applyPresetToHeaders } from '../utils/headerPresets.js';
+import { applyPresetToParams } from '../utils/paramPresets.js';
+
 import { HeaderPresetsModal } from './Modals.jsx';
+import { ParamPresetsModal } from './Modals.jsx';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
 const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
 
 /**
+ * 脚本片段插入浮层：按分类展示模板，选中后插入代码到目标字段
+ */
+function ScriptSnippetPopover({ onInsert }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef(null);
+  const popoverRef = useRef(null);
+
+  // 点击外部关闭
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target) &&
+          btnRef.current && !btnRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  return (
+    <div className="script-snippet-wrapper">
+      <button
+        ref={btnRef}
+        className="script-snippet-btn"
+        title="插入脚本模板片段"
+        onClick={() => setOpen(!open)}
+      >
+        插入片段
+      </button>
+      {open && (
+        <div className="snippet-popover" ref={popoverRef}>
+          {SCRIPT_TEMPLATES.map((cat) => (
+            <div key={cat.category} className="snippet-category">
+              <div className="snippet-category-title">{cat.category}</div>
+              {cat.templates.map((tpl) => (
+                <div key={tpl.name} className="snippet-item" onClick={() => { onInsert(tpl.code); setOpen(false); }}>
+                  {tpl.name}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * 请求顶栏（全宽）：方法 + URL + 发送，独立于下方分栏区，保证 URL 完整可见
  * （保存移入标题行，cURL/代码移入右侧工具条）
  */
-export function RequestBar({ request, sending, varNames = [], varMap = null, activeEnv = null, onChange, onSend, onCancel, onToast }) {
+export function RequestBar({ request, sending, varNames = [], varMap = null, activeEnv = null, urlHistory = [], onChange, onSend, onCancel, onToast }) {
+  const [methodOpen, setMethodOpen] = useState(false);
+
+  useEffect(() => {
+    if (!methodOpen) return;
+    const close = () => setMethodOpen(false);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [methodOpen]);
+
   /** URL 编辑 → 自动解析 query 到 Params 表 */
   const setUrl = (url) => {
     onChange({ ...request, url, params: syncParamsFromUrl(url, request.params) });
   };
 
+  // ---- URL 历史自动补全 ----
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [sugIndex, setSugIndex] = useState(-1);
+  const sugTimeoutRef = useRef(null);
+
+  const filterSuggestions = (input) => {
+    if (!input || !urlHistory.length) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    const lower = input.toLowerCase();
+    const matches = urlHistory.filter((h) => h.url.toLowerCase().includes(lower)).slice(0, 8);
+    setSuggestions(matches);
+    setShowSuggestions(matches.length > 0);
+    setSugIndex(-1);
+  };
+
+  const handleUrlChange = (url) => {
+    setUrl(url);
+    filterSuggestions(url);
+  };
+
+  const handleSelectSuggestion = (item) => {
+    onChange({ ...request, url: item.url, method: item.method, params: syncParamsFromUrl(item.url, request.params) });
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
+  const handleUrlBlur = () => {
+    sugTimeoutRef.current = setTimeout(() => {
+      setShowSuggestions(false);
+    }, 150);
+  };
+
+  const handleUrlFocus = () => {
+    if (sugTimeoutRef.current) clearTimeout(sugTimeoutRef.current);
+    if (request.url) filterSuggestions(request.url);
+  };
+
   const handleKeyDown = (e) => {
+    // URL suggestions 键盘导航
+    if (showSuggestions && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSugIndex((prev) => (prev + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSugIndex((prev) => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+        return;
+      }
+      if (e.key === 'Enter' && sugIndex >= 0) {
+        e.preventDefault();
+        handleSelectSuggestion(suggestions[sugIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSuggestions(false);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !sending) {
       onSend();
     }
@@ -67,28 +192,55 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
       style={envColor ? { '--env-accent': envColor } : undefined}
       title={envColor ? `当前环境：${activeEnv.name}` : undefined}
     >
-      <input
-        className={`method-select method-input method-${request.method}`}
-        list="method-list"
-        value={request.method}
-        title="选择或输入自定义方法"
-        onChange={(e) => onChange({ ...request, method: e.target.value.toUpperCase().replace(/[^A-Z-]/g, '') })}
-        spellCheck={false}
-      />
-      <datalist id="method-list">
-        {METHODS.map((m) => <option key={m} value={m} />)}
-      </datalist>
-      <VarInput
-        className="url-input"
-        placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
-        value={request.url}
-        varNames={varNames}
-        varMap={varMap}
-        highlight
-        onChange={setUrl}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-      />
+      <div className="method-dropdown" style={{ position: 'relative' }}>
+        <button
+          className={`method-select method-input method-${request.method}`}
+          title="选择 HTTP 方法"
+          onClick={() => setMethodOpen(!methodOpen)}
+        >
+          {request.method} <span className="method-caret">▾</span>
+        </button>
+        {methodOpen && (
+          <div className="method-dropdown-menu" onMouseDown={(e) => e.stopPropagation()}>
+            {METHODS.map((m) => (
+              <div
+                key={m}
+                className={`method-dropdown-item method-${m} ${m === request.method ? 'active' : ''}`}
+                onClick={() => { onChange({ ...request, method: m }); setMethodOpen(false); }}
+              >{m}</div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="url-input-wrap">
+        <VarInput
+          className="url-input"
+          placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
+          value={request.url}
+          varNames={varNames}
+          varMap={varMap}
+          highlight
+          onChange={handleUrlChange}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onBlur={handleUrlBlur}
+          onFocus={handleUrlFocus}
+        />
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="url-suggestions">
+            {suggestions.map((item, i) => (
+              <div
+                key={item.url}
+                className={`url-suggestion-item${i === sugIndex ? ' active' : ''}`}
+                onMouseDown={() => handleSelectSuggestion(item)}
+              >
+                <span className={`method method-${item.method}`}>{item.method}</span>
+                <span className="url-suggestion-url">{item.url}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {sending ? (
         <button className="btn-primary btn-sending" title="请求发送中，点击取消" onClick={onCancel}>
           <span className="btn-ring" aria-hidden="true" />发送中
@@ -105,7 +257,7 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets }) {
   // 当前活动页签
   const [tab, setTabRaw] = useState('params');
   const [tabDir, setTabDir] = useState(1); // 滑动方向：目标页签在右侧为 1，左侧为 -1
@@ -113,13 +265,29 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     setTabDir(TAB_ORDER.indexOf(key) >= TAB_ORDER.indexOf(tab) ? 1 : -1);
     setTabRaw(key);
   };
+
+  // 打开请求时自动定焦：params 有值 → params，body 有值 → body
+  const requestIdRef = useRef(request && request.id);
+  useEffect(() => {
+    if (!request || request.id === requestIdRef.current) return;
+    requestIdRef.current = request.id;
+    const hasParams = (request.params || []).some(p => p.key);
+    const hasBody = request.bodyType && request.bodyType !== 'none' && request.body;
+    if (hasParams) setTabRaw('params');
+    else if (hasBody) setTabRaw('body');
+  }, [request && request.id]);
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // Headers 预设：下拉菜单定位 + 管理弹窗开关
   const [presetMenu, setPresetMenu] = useState(null);
   const [presetMgrOpen, setPresetMgrOpen] = useState(false);
+  // Params 预设：下拉菜单定位 + 管理弹窗开关
+  const [paramPresetMenu, setParamPresetMenu] = useState(null);
+  const [paramPresetMgrOpen, setParamPresetMgrOpen] = useState(false);
   // 外部编辑中的脚本 token → 字段名映射（pre/post）
   const [extEditing, setExtEditing] = useState({});
+  // 当前活跃的脚本字段（用于插入片段时决定目标）
+  const [activeScriptField, setActiveScriptField] = useState('preScript');
   const requestRef = useRef(request);
   requestRef.current = request;
   const extEditingRef = useRef(extEditing);
@@ -134,6 +302,12 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [presetMenu]);
+  useEffect(() => {
+    if (!paramPresetMenu) return;
+    const close = () => setParamPresetMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [paramPresetMenu]);
 
   // 监听外部编辑器保存回传，写回对应脚本字段
   useEffect(() => {
@@ -282,6 +456,40 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     </>
   );
 
+  // Params 工具栏「预设」按钮 + 下拉菜单
+  const paramPresetsBtn = (
+    <>
+      <button
+        className={`icon-btn kv-bulk-btn ${paramPresetMenu ? 'on' : ''}`}
+        title="应用参数预设"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (paramPresetMenu) { setParamPresetMenu(null); return; }
+          const rect = e.currentTarget.getBoundingClientRect();
+          setParamPresetMenu({ top: rect.bottom + 4, left: rect.left });
+        }}
+      >预设 <JbIcon name="caret-down" size={10} className="caret-icon" /></button>
+      {paramPresetMenu && (
+        <div className="ctx-menu hp-menu" style={{ top: paramPresetMenu.top, left: paramPresetMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
+          {paramPresets.map((p) => (
+            <div
+              key={p.id}
+              className="ctx-item"
+              title={p.rows.map((r) => `${r.key}=${r.value}`).join('\n')}
+              onClick={() => { setParams(applyPresetToParams(request.params, p)); setParamPresetMenu(null); }}
+            >
+              {p.name}{p.builtIn ? <span className="hp-builtin-tag">内置</span> : null}
+              <span className="ctx-kbd">{p.rows.length} 项</span>
+            </div>
+          ))}
+          <div className="ctx-sep" />
+          <div className="ctx-item" onClick={() => { setParamPresetMenu(null); setParamPresetMgrOpen(true); }}>管理预设…</div>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="request-editor">
       <div className="editor-tabs">
@@ -314,6 +522,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
             varNames={varNames}
             varMap={varMap}
             label="参数列表"
+            toolbarExtra={paramPresetsBtn}
           />
         )}
         {tab === 'headers' && (
@@ -453,6 +662,16 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
         )}
         {tab === 'script' && (
           <div className="script-editor">
+            <div className="script-toolbar">
+              <ScriptSnippetPopover onInsert={(code) => {
+                const field = activeScriptField;
+                const prev = request[field] || '';
+                const newVal = prev ? prev + '\n' + code : code;
+                set(field, newVal);
+              }} />
+              <span className="script-toolbar-hint">当前插入目标：{activeScriptField === 'preScript' ? '前置脚本' : '后置脚本'}</span>
+            </div>
+            <div className="script-editor-cols">
             <div className="script-col">
               <div className="script-title">
                 前置脚本（发送前执行，可修改 rm.request / 写环境变量）
@@ -466,6 +685,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
                 placeholder={'// 示例：\n// rm.env.set("token", "abc123");\n// rm.request.headers.push({ key: "X-Trace", value: rm.env.get("token"), enabled: true });'}
                 value={request.preScript || ''}
                 onChange={(v) => set('preScript', v)}
+                onFocus={() => setActiveScriptField('preScript')}
               />
             </div>
             <div className="script-col">
@@ -481,7 +701,9 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
                 placeholder={'// 示例：\nrm.test("状态码为200", () => rm.assert(rm.response.status === 200));\n// rm.env.set("uid", rm.response.json().data.id);'}
                 value={request.postScript || ''}
                 onChange={(v) => set('postScript', v)}
+                onFocus={() => setActiveScriptField('postScript')}
               />
+            </div>
             </div>
           </div>
         )}
@@ -617,6 +839,13 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
           presets={headerPresets}
           onChangePresets={onChangeHeaderPresets}
           onClose={() => setPresetMgrOpen(false)}
+        />
+      )}
+      {paramPresetMgrOpen && (
+        <ParamPresetsModal
+          presets={paramPresets}
+          onChangePresets={onChangeParamPresets}
+          onClose={() => setParamPresetMgrOpen(false)}
         />
       )}
     </div>

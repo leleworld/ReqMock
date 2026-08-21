@@ -269,23 +269,54 @@ function fromInsomniaRequest(r) {
 
 // ---- HAR（HTTP Archive）----
 
-export function isHar(o) {
-  return o && typeof o === 'object' && o.log && Array.isArray(o.log.entries);
+/** 需要跳过的静态资源扩展名 */
+const HAR_STATIC_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|map|webp|avif|mp4|webm|mp3)(\?|$)/i;
+
+/** 判断是否为需要跳过的静态资源 */
+function isStaticResource(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    return HAR_STATIC_EXTENSIONS.test(pathname);
+  } catch (e) {
+    return HAR_STATIC_EXTENSIONS.test(url);
+  }
 }
 
-export function fromHar(data) {
+/** 判断 entry 是否应该被保留（XHR/Fetch 过滤 + 静态资源过滤） */
+function shouldKeepEntry(entry) {
+  const url = entry.request && entry.request.url;
+  if (!url) return false;
+  // 过滤静态资源
+  if (isStaticResource(url)) return false;
+  // 如果有 _resourceType 字段，只保留 xhr/fetch
+  if (entry._resourceType) {
+    const rt = entry._resourceType.toLowerCase();
+    return rt === 'xhr' || rt === 'fetch';
+  }
+  // 没有 _resourceType 字段时全部保留
+  return true;
+}
+
+export function isHar(o) {
+  return o && typeof o === 'object' && o.log && o.log.entries && Array.isArray(o.log.entries);
+}
+
+export function parseHar(data) {
   const requests = (data.log.entries || [])
-    .filter((e) => e && e.request && e.request.url)
+    .filter((e) => e && e.request && e.request.url && shouldKeepEntry(e))
     .map((e) => fromHarEntry(e));
   return {
     id: uuid(),
-    name: 'HAR 导入',
-    doc: `从 HAR 文件导入的 ${requests.length} 个请求`,
+    name: 'HAR Import',
+    doc: `Imported ${requests.length} requests from HAR file`,
     headers: [],
     folders: [],
     requests
   };
 }
+
+/** 保留旧名称作为别名，兼容已有调用 */
+export const fromHar = parseHar;
 
 /** HAR 中的伪 Header（:method: 等）与自动生成头不导入 */
 const HAR_SKIP_HEADERS = new Set(['host', 'content-length', 'connection', 'accept-encoding']);
@@ -300,10 +331,26 @@ function fromHarEntry(entry) {
   let bodyType = 'none';
   let body = '';
   const pd = r.postData;
+  // 从 queryString 提取 params
+  const params = (r.queryString || [])
+    .map((q) => ({ key: q.name || '', value: q.value || '', enabled: true }));
   if (pd && typeof pd.text === 'string' && pd.text) {
     body = pd.text;
     const mime = pd.mimeType || '';
-    bodyType = mime.includes('json') ? 'json' : mime.includes('form') ? 'form' : 'text';
+    bodyType = mime.includes('json')
+      ? 'json'
+      : mime.includes('x-www-form-urlencoded')
+        ? 'form'
+        : mime.includes('multipart')
+          ? 'multipart'
+          : 'text';
+  } else if (pd && Array.isArray(pd.params) && pd.params.length) {
+    // multipart form-data 以 params 数组形式存在
+    bodyType = (pd.mimeType || '').includes('multipart') ? 'multipart' : 'form';
+    body = pd.params
+      .filter((p) => p.name)
+      .map((p) => `${p.name}=${p.value ?? ''}`)
+      .join('&');
   }
 
   return normalizeRequest({
@@ -314,6 +361,7 @@ function fromHarEntry(entry) {
     headers: (r.headers || [])
       .filter((h) => h.name && !h.name.startsWith(':') && !HAR_SKIP_HEADERS.has(h.name.toLowerCase()))
       .map((h) => ({ key: h.name, value: h.value || '', enabled: true })),
+    params,
     bodyType,
     body
   });
