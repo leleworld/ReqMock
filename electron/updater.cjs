@@ -1,7 +1,7 @@
 /**
- * 自动更新（electron-updater · generic provider）
- * 更新源地址在 package.json build.publish 中配置，打包时由 electron-builder 写入 app-update.yml。
- * 流程：检查（启动自动 / 设置页手动）→ 渲染层确认后下载 → 下载完成提示重启安装。
+ * 自动更新（electron-updater · GitHub provider）
+ * 流程：启动后静默检查 → 发现新版自动下载 → 下载完成提示重启安装。
+ * 用户无需确认下载，体验与 VS Code / Chrome 一致。
  */
 const { app, ipcMain } = require('electron');
 
@@ -11,7 +11,7 @@ let updater = null;
 function getAutoUpdater() {
   if (!updater) {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.autoDownload = false; // 由渲染层确认后再下载
+    autoUpdater.autoDownload = true; // 发现新版本后自动下载，无需用户确认
     autoUpdater.autoInstallOnAppQuit = true; // 用户选择"稍后"时，退出应用自动完成安装
     updater = autoUpdater;
   }

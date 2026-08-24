@@ -354,12 +354,8 @@ export default function App() {
     const unsub = window.api.onUpdateEvent((evt) => {
       if (evt.type === 'available') {
         manualUpdateCheckRef.current = false;
-        pushNotice(`发现新版本 v${evt.version}`, 'info');
-        setConfirm({
-          title: '发现新版本',
-          message: `新版本 v${evt.version} 可用，是否立即下载？下载完成后会提示重启安装。`,
-          onConfirm: () => { setUpdateProgress(0); window.api.downloadUpdate(); }
-        });
+        pushNotice(`正在下载新版本 v${evt.version}…`, 'info');
+        setUpdateProgress(0);
       } else if (evt.type === 'not-available') {
         if (manualUpdateCheckRef.current) showToast('当前已是最新版本', 'success');
         manualUpdateCheckRef.current = false;
@@ -368,7 +364,7 @@ export default function App() {
       } else if (evt.type === 'downloaded') {
         setUpdateProgress(null);
         setConfirm({
-          title: '更新已就绪',
+          title: '新版本已下载完成',
           message: `v${evt.version} 下载完成，立即重启安装？取消则在退出应用时自动安装。`,
           onConfirm: () => window.api.installUpdate()
         });
