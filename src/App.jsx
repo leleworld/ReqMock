@@ -23,8 +23,9 @@ import { executeRequest } from './utils/requestPipeline.js';
 import EnvironmentPanel from './components/EnvironmentPanel.jsx';
 import {
   SaveRequestModal, CollectionSettingsModal, CurlImportModal,
-  CodegenModal, ExportCollectionModal, SettingsModal, PromptModal, ConfirmModal, AboutModal
+  CodegenModal, ExportCollectionModal, PromptModal, ConfirmModal, AboutModal
 } from './components/Modals.jsx';
+import SettingsPage from './components/SettingsPage.jsx';
 import {
   newCollection, newFolder, normalizeNode, normalizeRequest,
   updateNode, removeNode, findNode, findOwnerCollection,
@@ -2094,7 +2095,7 @@ export default function App() {
         />
       )}
       {modal && modal.type === 'settings' && (
-        <SettingsModal
+        <SettingsPage
           settings={settings}
           onChange={handleChangeSettings}
           onBackup={handleBackupData}

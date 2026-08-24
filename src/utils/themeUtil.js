@@ -56,7 +56,12 @@ export function normalizeSettings(s) {
     sslVerify: settings.sslVerify !== false,
     // 数据
     historyLimit: clampNum(settings.historyLimit, 50, 1000, 200),
-    // 可拖拽布局：侧栏宽度 / 请求响应分栏比例（上下布局取高度%，左右布局取宽度%）
+    // 视图 & 交互
+    zenMode: settings.zenMode === true,
+    trayMode: settings.trayMode === true,
+    zoomLevel: [75, 100, 125, 150].includes(settings.zoomLevel) ? settings.zoomLevel : 100,
+    proxy: typeof settings.proxy === 'string' ? settings.proxy : '',
+    // 可拖拽布局：侧栏宽度 / 请求响应分栏比例
     sidebarWidth: clampNum(settings.sidebarWidth, 200, 420, 264),
     splitV: clampNum(settings.splitV, 25, 75, 45),
     splitH: clampNum(settings.splitH, 25, 75, 50),
