@@ -22,6 +22,7 @@ export default function KeyValueEditor({
   const [showLocked, setShowLocked] = useState(true);
   const [copied, setCopied] = useState(false);
   const listId = useId();
+  const [expandIdx, setExpandIdx] = useState(-1); // 当前展开的行索引
   const [encMenu, setEncMenu] = useState(null); // { x, y, index, start, end, text }
   const bodyRef = useRef(null);
   // 幽灵行输入后待聚焦的目标 { index, field }
@@ -179,7 +180,7 @@ export default function KeyValueEditor({
             )}
           </AnimatePresence>
           {rows.map((row, i) => (
-            <div key={i} className="kv-row" data-idx={i}>
+            <div key={i} className={`kv-row${expandIdx === i ? ' kv-row-expanded' : ''}`} data-idx={i}>
               <input
                 type="checkbox"
                 checked={row.enabled !== false}
@@ -192,16 +193,35 @@ export default function KeyValueEditor({
                 list={keySuggestions.length > 0 ? listId : undefined}
                 onChange={(e) => update(i, 'key', e.target.value)}
               />
-              <VarInput
-                className="kv-value"
-                placeholder={valuePlaceholder}
-                value={row.value}
-                varNames={varNames}
-                varMap={varMap}
-                highlight="vars"
-                onChange={(v) => update(i, 'value', v)}
-                onContextMenu={(e) => handleValueContext(e, i)}
-              />
+              {expandIdx === i ? (
+                <textarea
+                  className="kv-value kv-value-expanded"
+                  value={row.value}
+                  placeholder={valuePlaceholder}
+                  onChange={(e) => update(i, 'value', e.target.value)}
+                  onContextMenu={(e) => handleValueContext(e, i)}
+                  onBlur={() => setExpandIdx(-1)}
+                  autoFocus
+                  rows={Math.min(Math.max(2, Math.ceil((row.value || '').length / 40)), 10)}
+                />
+              ) : (
+                <VarInput
+                  className="kv-value"
+                  placeholder={valuePlaceholder}
+                  value={row.value}
+                  varNames={varNames}
+                  varMap={varMap}
+                  highlight="vars"
+                  onChange={(v) => update(i, 'value', v)}
+                  onContextMenu={(e) => handleValueContext(e, i)}
+                  onFocus={(e) => {
+                    const el = e.target;
+                    if (el.scrollWidth > el.clientWidth || (row.value || '').length > 50) {
+                      setExpandIdx(i);
+                    }
+                  }}
+                />
+              )}
               <span className="item-delete" title="删除此行" onClick={() => remove(i)}>×</span>
             </div>
           ))}
