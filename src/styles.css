@@ -3091,14 +3091,6 @@ body.resizing { user-select: none; cursor: col-resize; }
 .sp-about-name { font-size: 15px; font-weight: 600; color: var(--text); }
 .sp-about-ver { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
 .sp-about-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-  font-size: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text);
-  line-height: 1.6;
-  word-break: break-all;
-  white-space: pre-wrap;
-  user-select: text;
-}
 
 
 
