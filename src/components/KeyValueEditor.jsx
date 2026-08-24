@@ -90,6 +90,7 @@ export default function KeyValueEditor({
       const val = rows[index].value;
       const newVal = val.slice(0, start) + result + val.slice(end);
       update(index, 'value', newVal);
+      setExpandIdx(index);
     } catch (e) { /* 转换失败静默 */ }
     setEncMenu(null);
   };
@@ -209,7 +210,7 @@ export default function KeyValueEditor({
                       setExpandIdx(i);
                     }
                   }}
-                  onBlur={() => { if (expandIdx === i) setTimeout(() => setExpandIdx(-1), 150); }}
+                onBlur={() => { if (expandIdx === i && !encMenu) setTimeout(() => setExpandIdx(-1), 200); }}
                 />
                 {expandIdx === i && (row.value || '').length > 0 && (
                   <div className="kv-value-popover">
