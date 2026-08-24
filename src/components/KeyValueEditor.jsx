@@ -103,6 +103,19 @@ export default function KeyValueEditor({
     return () => window.removeEventListener('mousedown', close);
   }, [encMenu]);
 
+  // 点击外部关闭值浮层
+  useEffect(() => {
+    if (expandIdx < 0) return;
+    const close = (e) => {
+      const wrap = bodyRef.current && bodyRef.current.querySelector(`.kv-row[data-idx="${expandIdx}"] .kv-value-wrap`);
+      if (wrap && !wrap.contains(e.target) && !(encMenu)) {
+        setExpandIdx(-1);
+      }
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [expandIdx, encMenu]);
+
   return (
     <div className="kv-editor">
       <div className="kv-toolbar">
