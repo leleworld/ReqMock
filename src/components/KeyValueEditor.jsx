@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { urlEncode, urlDecode } from '../utils/toolboxUtil.js';
 import VarInput from './VarInput.jsx';
 import { JbIcon } from './Icons.jsx';
 
@@ -22,6 +23,7 @@ export default function KeyValueEditor({
   const [showLocked, setShowLocked] = useState(true);
   const [copied, setCopied] = useState(false);
   const listId = useId();
+  const [encMenu, setEncMenu] = useState(null); // { x, y, index, start, end, text }
   const bodyRef = useRef(null);
   // 幽灵行输入后待聚焦的目标 { index, field }
   const focusReq = useRef(null);
@@ -68,6 +70,37 @@ export default function KeyValueEditor({
   };
 
   const hasContent = rows.some((r) => r.key || r.value);
+
+  /** 右键菜单：对选中文本进行 URL 编解码 */
+  const handleValueContext = (e, index) => {
+    const input = e.target;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (start === end) return; // 无选区不弹菜单
+    e.preventDefault();
+    const text = String(input.value).slice(start, end);
+    setEncMenu({ x: e.clientX, y: e.clientY, index, start, end, text });
+  };
+
+  const applyEnc = (fn) => {
+    if (!encMenu) return;
+    const { index, start, end, text } = encMenu;
+    try {
+      const result = fn(text);
+      const val = rows[index].value;
+      const newVal = val.slice(0, start) + result + val.slice(end);
+      update(index, 'value', newVal);
+    } catch (e) { /* 转换失败静默 */ }
+    setEncMenu(null);
+  };
+
+  // 点击外部关闭菜单
+  useEffect(() => {
+    if (!encMenu) return;
+    const close = () => setEncMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [encMenu]);
 
   return (
     <div className="kv-editor">
@@ -168,6 +201,7 @@ export default function KeyValueEditor({
                 varMap={varMap}
                 highlight="vars"
                 onChange={(v) => update(i, 'value', v)}
+                onContextMenu={(e) => handleValueContext(e, i)}
               />
               <span className="item-delete" title="删除此行" onClick={() => remove(i)}>×</span>
             </div>
@@ -188,6 +222,19 @@ export default function KeyValueEditor({
             />
             <span className="item-delete kv-ghost-pad">×</span>
           </div>
+        </div>
+      )}
+      {encMenu && (
+        <div
+          className="kv-encode-menu"
+          style={{ left: encMenu.x, top: encMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="kv-encode-menu-title">选中: {encMenu.text.length > 30 ? encMenu.text.slice(0, 30) + '…' : encMenu.text}</div>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(urlEncode)}>URL Encode</button>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(urlDecode)}>URL Decode</button>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(encodeURIComponent)}>Encode (完整)</button>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(decodeURIComponent)}>Decode (完整)</button>
         </div>
       )}
     </div>

@@ -2913,6 +2913,37 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .inline-label + .inline-label { margin-top: 6px; }
 
+/* ===== KV Encode/Decode Context Menu ===== */
+.kv-encode-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-elevated, #2b2d30);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+}
+.kv-encode-menu-title {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kv-encode-menu-item {
+  display: block; width: 100%;
+  padding: 6px 10px;
+  border: none; background: transparent;
+  color: var(--text); font-size: 13px;
+  text-align: left; border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.kv-encode-menu-item:hover { background: var(--accent-bg, color-mix(in srgb, var(--accent) 15%, transparent)); color: var(--accent); }
+
 
 
 /* ==== 全局变量 ==== */
