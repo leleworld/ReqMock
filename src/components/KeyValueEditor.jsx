@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { urlDecode } from '../utils/toolboxUtil.js';
 import VarInput from './VarInput.jsx';
 import { JbIcon } from './Icons.jsx';
 
@@ -231,10 +230,8 @@ export default function KeyValueEditor({
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="kv-encode-menu-title">选中: {encMenu.text.length > 30 ? encMenu.text.slice(0, 30) + '…' : encMenu.text}</div>
-          <button className="kv-encode-menu-item" onClick={() => applyEnc(encodeURI)}>URL Encode</button>
-          <button className="kv-encode-menu-item" onClick={() => applyEnc(urlDecode)}>URL Decode</button>
-          <button className="kv-encode-menu-item" onClick={() => applyEnc(encodeURIComponent)}>URL Encode (严格)</button>
-          <button className="kv-encode-menu-item" onClick={() => applyEnc(decodeURIComponent)}>URL Decode (严格)</button>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(encodeURIComponent)}>URL Encode</button>
+          <button className="kv-encode-menu-item" onClick={() => applyEnc(decodeURIComponent)}>URL Decode</button>
         </div>
       )}
     </div>
