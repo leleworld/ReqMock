@@ -2945,11 +2945,12 @@ body.resizing { user-select: none; cursor: col-resize; }
 .kv-encode-menu-item:hover { background: var(--accent-bg, color-mix(in srgb, var(--accent) 15%, transparent)); color: var(--accent); }
 
 /* ===== KV Value Popover ===== */
-.kv-row { position: relative; }
+.kv-value-wrap { position: relative; flex: 1; min-width: 0; }
+.kv-value-wrap > .var-input-wrap { width: 100%; }
 .kv-value-popover {
   position: absolute;
   top: 100%;
-  left: 80px; right: 24px;
+  left: 0; right: 0;
   z-index: 100;
   margin-top: 2px;
   padding: 8px 10px;
@@ -2957,7 +2958,7 @@ body.resizing { user-select: none; cursor: col-resize; }
   border: 1px solid var(--accent);
   border-radius: var(--radius-m);
   box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
 }
 .kv-value-popover-content {

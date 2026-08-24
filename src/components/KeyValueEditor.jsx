@@ -193,29 +193,31 @@ export default function KeyValueEditor({
                 list={keySuggestions.length > 0 ? listId : undefined}
                 onChange={(e) => update(i, 'key', e.target.value)}
               />
-              <VarInput
-                className="kv-value"
-                placeholder={valuePlaceholder}
-                value={row.value}
-                varNames={varNames}
-                varMap={varMap}
-                highlight="vars"
-                onChange={(v) => update(i, 'value', v)}
-                onContextMenu={(e) => handleValueContext(e, i)}
-                onFocus={(e) => {
-                  const el = e.target;
-                  if (el.scrollWidth > el.clientWidth || (row.value || '').length > 50) {
-                    setExpandIdx(i);
-                  }
-                }}
-                onBlur={() => { if (expandIdx === i) setTimeout(() => setExpandIdx(-1), 150); }}
-              />
+              <span className="kv-value-wrap">
+                <VarInput
+                  className="kv-value"
+                  placeholder={valuePlaceholder}
+                  value={row.value}
+                  varNames={varNames}
+                  varMap={varMap}
+                  highlight="vars"
+                  onChange={(v) => update(i, 'value', v)}
+                  onContextMenu={(e) => handleValueContext(e, i)}
+                  onFocus={(e) => {
+                    const el = e.target;
+                    if (el.scrollWidth > el.clientWidth || (row.value || '').length > 50) {
+                      setExpandIdx(i);
+                    }
+                  }}
+                  onBlur={() => { if (expandIdx === i) setTimeout(() => setExpandIdx(-1), 150); }}
+                />
+                {expandIdx === i && (row.value || '').length > 0 && (
+                  <div className="kv-value-popover">
+                    <div className="kv-value-popover-content">{row.value}</div>
+                  </div>
+                )}
+              </span>
               <span className="item-delete" title="删除此行" onClick={() => remove(i)}>×</span>
-              {expandIdx === i && (row.value || '').length > 0 && (
-                <div className="kv-value-popover">
-                  <div className="kv-value-popover-content">{row.value}</div>
-                </div>
-              )}
             </div>
           ))}
           <div className="kv-row kv-ghost">
