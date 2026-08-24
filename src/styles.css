@@ -2962,6 +2962,14 @@ body.resizing { user-select: none; cursor: col-resize; }
   overflow-y: auto;
 }
 .kv-value-popover-content {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+  line-height: 1.6;
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: text;
+}
 
 /* ===== Settings Page (Full-page Hoppscotch style) ===== */
 .settings-page-mask {
