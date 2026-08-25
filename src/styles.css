@@ -1784,7 +1784,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-scroll-btn:hover { background: var(--bg-hover); color: var(--text); }
 
-.tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; }
+.tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; width: 0; margin: 0; overflow: hidden; }
 
 /* 固定区：被固定的标签/分组常驻左侧，不随滚动区挤走 */
 
@@ -1796,8 +1796,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
   overflow-x: auto; scrollbar-width: none;
 
-  padding-right: 8px; margin-right: 2px;
-
+  padding-right: 4px; margin-right: 4px;
   border-right: 1px solid var(--border);
 
 }
