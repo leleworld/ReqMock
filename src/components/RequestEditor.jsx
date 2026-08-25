@@ -787,6 +787,17 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               </label>
             </div>
             <div className="auth-row">
+              <span className="auth-label">URL 编码</span>
+              <label className="inline-label">
+                <input
+                  type="checkbox"
+                  checked={request.encodeUrl !== false}
+                  onChange={(e) => set('encodeUrl', e.target.checked)}
+                />
+                发送时自动 encodeURIComponent 编码参数值（关闭则原样发送）
+              </label>
+            </div>
+            <div className="auth-row">
               <span className="auth-label">Cookie Jar</span>
               <select
                 className="auth-type-select"

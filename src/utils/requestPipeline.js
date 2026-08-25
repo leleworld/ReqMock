@@ -98,6 +98,21 @@ export async function executeRequest(reqSnapshot, ctx) {
     finalReq = { ...finalReq, headers: [...(finalReq.headers || []), { key: 'ReqMock-Id', value: genUuid(), enabled: true }] };
   }
 
+  // 3.5 URL 编码：encodeUrl 默认 true — 对 query 参数值做 encodeURIComponent
+  if (finalReq.encodeUrl !== false && finalReq.url) {
+    const qIdx = finalReq.url.indexOf('?');
+    if (qIdx >= 0) {
+      const base = finalReq.url.slice(0, qIdx);
+      const query = finalReq.url.slice(qIdx + 1);
+      const encoded = query.split('&').map((pair) => {
+        const eqIdx = pair.indexOf('=');
+        if (eqIdx < 0) return encodeURIComponent(pair);
+        return encodeURIComponent(decodeURIComponent(pair.slice(0, eqIdx))) + '=' + encodeURIComponent(decodeURIComponent(pair.slice(eqIdx + 1)));
+      }).join('&');
+      finalReq = { ...finalReq, url: base + '?' + encoded };
+    }
+  }
+
   // 4. 发送
   // 注入 settings 中的网络配置到发送 payload
   const netOpts = {};

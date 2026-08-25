@@ -47,12 +47,16 @@ export function syncParamsFromUrl(url, prevParams) {
 /**
  * Params 表变化 → 回写 URL：
  * 用启用且 key 非空的行重建 URL 的 query 部分
+ * @param {string} url - 当前 URL
+ * @param {Array} params - 参数行
+ * @param {boolean} encode - 是否使用 encodeURIComponent 全编码（默认 false 使用 lightEncode）
  */
-export function buildUrlFromParams(url, params) {
+export function buildUrlFromParams(url, params, encode = false) {
   const { base } = splitUrl(url);
+  const enc = encode ? (s) => encodeURIComponent(String(s ?? '')) : lightEncode;
   const pairs = (params || [])
     .filter((p) => p.enabled !== false && p.key)
-    .map((p) => `${lightEncode(p.key)}=${lightEncode(p.value)}`);
+    .map((p) => `${enc(p.key)}=${enc(p.value)}`);
   return pairs.length ? `${base}?${pairs.join('&')}` : base;
 }
 
