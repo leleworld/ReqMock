@@ -1786,6 +1786,15 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; width: 0; margin: 0; overflow: hidden; }
 
+/* 固定标签区包裹容器 */
+.tab-pinned-wrap {
+  display: flex; align-items: center;
+  flex-shrink: 0; max-width: 50%;
+  border-right: 1px solid var(--border);
+  margin-right: 4px;
+}
+.tab-scroll-btn-sm { width: 16px; height: 22px; margin: 0; }
+
 /* 固定区：被固定的标签/分组常驻左侧，不随滚动区挤走 */
 
 .tab-pinned {
@@ -1796,8 +1805,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
   overflow-x: auto; scrollbar-width: none;
 
-  padding-right: 4px; margin-right: 4px;
-  border-right: 1px solid var(--border);
+  padding: 0 2px;
 
 }
 
