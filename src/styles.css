@@ -1786,41 +1786,6 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; width: 0; margin: 0; overflow: hidden; }
 
-/* 固定区：被固定的标签/分组常驻左侧，不随滚动区挤走 */
-
-.tab-pinned {
-
-  position: relative; display: flex; align-items: center; gap: 2px;
-
-  flex-shrink: 0; max-width: 45%;
-
-  overflow-x: auto; scrollbar-width: none;
-
-  padding-right: 4px; margin-right: 4px;
-  border-right: 1px solid var(--border);
-
-}
-
-.tab-pinned::-webkit-scrollbar { display: none; }
-
-/* 固定区翻页按钮：sticky 定位，贴在可滚动容器两端 */
-.pinned-scroll-btn {
-  position: sticky;
-  top: 0;
-  flex-shrink: 0;
-  z-index: 2;
-  width: 18px; height: 24px;
-  display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--radius-s);
-  background: var(--bg-panel, #26282c);
-  color: var(--text-dim);
-  cursor: pointer;
-  box-shadow: 0 0 4px rgba(0,0,0,0.3);
-}
-.pinned-scroll-btn:hover { background: var(--bg-hover); color: var(--text); }
-.pinned-scroll-l { left: 0; }
-.pinned-scroll-r { right: 0; }
-
 .tab-pin { color: var(--accent); flex-shrink: 0; }
 
 .tab-pin-light { color: #fff; }

@@ -32,9 +32,6 @@ export default function TabBar({
   // 标签溢出检测：内容宽度超出可视宽度时显示「全部标签」下拉；同时跟踪左右可滚方向用于边缘渐隐提示
   const listRef = useRef(null);
   const [overflowing, setOverflowing] = useState(false);
-  const pinnedRef = useRef(null);
-  const [pinnedOverflow, setPinnedOverflow] = useState(false);
-  const [pinnedFadeL, setPinnedFadeL] = useState(false);
   const [fadeL, setFadeL] = useState(false);
   const [fadeR, setFadeR] = useState(false);
 
@@ -67,35 +64,6 @@ export default function TabBar({
       mo.disconnect();
     };
   }, [tabs.length]);
-
-  // 固定标签区：溢出检测 + 鼠标滚轮横向滚动
-  useEffect(() => {
-    const el = pinnedRef.current;
-    if (!el) return;
-    const check = () => {
-      const over = el.scrollWidth > el.clientWidth + 4;
-      setPinnedOverflow(over);
-      setPinnedFadeL(over && el.scrollLeft > 4);
-    };
-    check();
-    el.addEventListener('scroll', check, { passive: true });
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    const onWheel = (e) => {
-      if (el.scrollWidth <= el.clientWidth + 4) return;
-      const delta = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      if (Math.abs(delta) < 1) return;
-      e.preventDefault();
-      el.scrollLeft += delta;
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('scroll', check); ro.disconnect(); };
-  }, [tabs.length]);
-
-  const scrollPinned = (dir) => {
-    const el = pinnedRef.current;
-    if (el) el.scrollBy({ left: dir * Math.max(80, el.clientWidth * 0.5), behavior: 'smooth' });
-  };
 
   // 鼠标滚轮横向滚动：纵向滚轮映射为标签列表横向滚动（无可横向空间时放行，避免拦截页面滚动）
   useEffect(() => {
@@ -335,13 +303,6 @@ export default function TabBar({
 
   return (
     <div className="tab-bar">
-      {pinnedItems.length > 0 && (
-        <div className="tab-pinned" ref={pinnedRef} aria-label="已固定的标签">
-          {pinnedOverflow && pinnedFadeL && <button className="pinned-scroll-btn pinned-scroll-l" onClick={() => scrollPinned(-1)}><JbIcon name="chevron-left" size={12} /></button>}
-          {pinnedItems}
-          {pinnedOverflow && <button className="pinned-scroll-btn pinned-scroll-r" onClick={() => scrollPinned(1)}><JbIcon name="chevron-right" size={12} /></button>}
-        </div>
-      )}
       <button
         className={`tab-scroll-btn ${fadeL ? '' : 'is-hidden'}`}
         title="向左滚动标签"
@@ -351,6 +312,7 @@ export default function TabBar({
       <div className="tab-list-wrap">
         {fadeL && <span className="tab-fade tab-fade-l" aria-hidden="true" />}
         <div className="tab-list" ref={listRef}>
+          {pinnedItems}
           {items}
         </div>
         {fadeR && <span className="tab-fade tab-fade-r" aria-hidden="true" />}
