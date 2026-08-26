@@ -21,7 +21,7 @@ export function newFolder(name = '新建文件夹') {
 export function normalizeRequest(req) {
   return {
     id: req.id || uuid(),
-    name: req.name || '未命名请求',
+    name: req.name || '',
     method: req.method || 'GET',
     url: req.url || '',
     params: req.params || [],
@@ -591,4 +591,22 @@ function fromPostmanEnvironment(e) {
       enabled: v.enabled !== false
     }))
   };
+}
+
+/**
+ * 从 URL 提取显示名称：取路径最后一段（去掉 query）
+ * 例：https://host/api/v1/columns?a=1 → "columns"
+ *     http://host/api/1?appVersion=xxx → "1"
+ *     空 URL → "未命名请求"
+ */
+export function nameFromUrl(url) {
+  if (!url) return '未命名请求';
+  try {
+    // 去掉 query 和 hash
+    const path = url.split('?')[0].split('#')[0];
+    // 取最后一段非空路径
+    const segments = path.split('/').filter(Boolean);
+    const last = segments[segments.length - 1];
+    return last || '未命名请求';
+  } catch (e) { return '未命名请求'; }
 }

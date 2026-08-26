@@ -30,7 +30,7 @@ import {
   newCollection, newFolder, normalizeNode, normalizeRequest,
   updateNode, removeNode, findNode, findOwnerCollection,
   upsertRequestById, removeRequestById, findRequestPath, findRequestById, moveRequest,
-  exportCollection, exportWorkspace, exportEnvironment, exportEnvironments, parseImport
+  exportCollection, exportWorkspace, exportEnvironment, exportEnvironments, parseImport, nameFromUrl
 } from './utils/collectionUtil.js';
 import { newEnvironment, buildVarMap, resolveRequest, mergeVariables } from './utils/envUtil.js';
 import { applyAutoGroups, pickGroupColor, reorderTabsByGroup } from './utils/tabGroupUtil.js';
@@ -49,6 +49,9 @@ export function newRequest() {
   return normalizeRequest({ id: uuid() });
 }
 
+/** 请求显示名：优先用 name，否则从 URL 提取最后路径段 */
+export function reqDisplayName(req) { return req.name || nameFromUrl(req.url); }
+
 /** 新建一个请求标签页（每个标签独立持有请求/响应/脚本结果/发送状态） */
 function createTab(request) {
   return { id: uuid(), kind: 'request', request, response: null, scriptResult: null, sending: false };
@@ -58,7 +61,7 @@ function createTab(request) {
 function isBlankRequest(req) {
   return !req.url && req.bodyType === 'none' && !req.body &&
     (req.params || []).length === 0 && (req.headers || []).length === 0 &&
-    (!req.name || req.name === '未命名请求');
+    !req.name;
 }
 
 /** 状态栏响应体积展示 */
@@ -668,7 +671,7 @@ export default function App() {
   const handleRenameRequest = () => {
     if (!activeRequest) return;
     setPrompt({
-      title: '重命名请求', label: '请求名称', defaultValue: activeRequest.name || '未命名请求',
+      title: '重命名请求', label: '请求名称', defaultValue: reqDisplayName(activeRequest),
       onConfirm: (name) => {
         if (!name || name === activeRequest.name) return;
         const req = { ...activeRequest, name };
@@ -806,7 +809,7 @@ export default function App() {
     if (!force && isTabDirty(tab)) {
       setConfirm({
         title: '关闭未保存的标签',
-        message: `「${tab.request.name || '未命名请求'}」有未保存的修改，关闭后将丢失，确定关闭？`,
+        message: `「${reqDisplayName(tab.request)}」有未保存的修改，关闭后将丢失，确定关闭？`,
         danger: true,
         onConfirm: () => handleCloseTab(tabId, true)
       });
@@ -981,7 +984,7 @@ export default function App() {
   /** Ctrl+D：把当前请求复制到新标签（新 id，与原请求脱钩） */
   const handleDuplicateTab = () => {
     if (curTab.kind !== 'request') return;
-    const req = normalizeRequest({ ...curTab.request, id: uuid(), name: (curTab.request.name || '未命名请求') + ' 副本' });
+    const req = normalizeRequest({ ...curTab.request, id: uuid(), name: (reqDisplayName(curTab.request)) + ' 副本' });
     const tab = createTab(req);
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
@@ -992,7 +995,7 @@ export default function App() {
   const handleCloneTab = (tabId) => {
     const srcTab = tabs.find((t) => t.id === tabId);
     if (!srcTab || srcTab.kind !== 'request') return;
-    const req = normalizeRequest({ ...JSON.parse(JSON.stringify(srcTab.request)), id: uuid(), name: (srcTab.request.name || '未命名请求') + ' 副本' });
+    const req = normalizeRequest({ ...JSON.parse(JSON.stringify(srcTab.request)), id: uuid(), name: reqDisplayName(srcTab.request) + ' 副本' });
     const tab = createTab(req);
     const idx = tabs.findIndex((t) => t.id === tabId);
     setTabs((prev) => [...prev.slice(0, idx + 1), tab, ...prev.slice(idx + 1)]);
@@ -1773,7 +1776,7 @@ export default function App() {
             {/* 标题行：请求名（点击重命名）+ 所属集合路径 + 保存按钮 */}
             <div className="title-row">
               <span className="req-title" title="点击重命名" onClick={handleRenameRequest}>
-                {activeRequest.name || '未命名请求'}<span className="req-title-edit"><JbIcon name="pencil" size={12} /></span>
+                {reqDisplayName(activeRequest)}<span className="req-title-edit"><JbIcon name="pencil" size={12} /></span>
               </span>
               {breadcrumb ? (
                 <span className="title-crumbs">
