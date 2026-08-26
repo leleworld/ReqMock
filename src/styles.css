@@ -5479,3 +5479,79 @@ body::after {
   font-size: 12px; color: var(--text-dim);
 }
 
+/* ===== Diff Tool v2 ===== */
+.diff-tool .diff-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.diff-tool .diff-toolbar-left { display: flex; gap: 4px; }
+.diff-tool .diff-toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.diff-tool .diff-inputs { display: flex; gap: 8px; margin-bottom: 10px; }
+.diff-tool .diff-inputs .tool-textarea { flex: 1; min-height: 120px; max-height: 200px; font-family: var(--font-mono); font-size: 13px; }
+
+.diff-stats-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 10px; margin-bottom: 8px;
+  background: var(--bg-hover); border-radius: var(--radius-s);
+  font-size: 13px; font-family: var(--font-mono);
+}
+.diff-stats-bar .diff-stat-add { color: var(--green); font-weight: 600; }
+.diff-stats-bar .diff-stat-del { color: var(--red); font-weight: 600; }
+.diff-stats-bar .diff-stat-mod { color: var(--orange); }
+.diff-stats-bar .diff-stat-sim { color: var(--text-dim); margin-left: auto; }
+.diff-stats-bar .diff-stat-ok { color: var(--green); }
+
+/* Split view */
+.diff-split {
+  display: flex; gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius-m);
+  max-height: 420px; overflow: hidden;
+}
+.diff-pane {
+  flex: 1; overflow: auto;
+  background: var(--bg);
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+}
+.diff-row { display: flex; min-height: 22px; }
+.diff-row-same { background: transparent; }
+.diff-row-del, .diff-row-mod.diff-pane-left .diff-row-mod { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.diff-row-add { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.diff-row-empty { background: var(--bg-hover); opacity: 0.4; }
+.diff-pane-left .diff-row-mod { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.diff-pane-right .diff-row-mod { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.diff-linenum {
+  width: 36px; flex-shrink: 0; padding: 0 6px;
+  text-align: right; color: var(--text-dim); opacity: 0.6;
+  user-select: none; font-size: 11px; line-height: 22px;
+  border-right: 1px solid var(--border);
+}
+.diff-text { flex: 1; padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
+
+/* 字符级高亮 */
+.diff-char-del { background: color-mix(in srgb, var(--red) 30%, transparent); border-radius: 2px; }
+.diff-char-add { background: color-mix(in srgb, var(--green) 30%, transparent); border-radius: 2px; }
+
+/* 折叠行 */
+.diff-fold-line {
+  padding: 2px 10px; text-align: center;
+  font-size: 11px; color: var(--text-dim);
+  background: var(--bg-hover); cursor: pointer;
+  user-select: none;
+}
+.diff-fold-line:hover { background: var(--bg-active); color: var(--text); }
+
+/* Unified view */
+.diff-unified {
+  border: 1px solid var(--border); border-radius: var(--radius-m);
+  max-height: 420px; overflow: auto;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+}
+.diff-unified .diff-line { display: flex; min-height: 22px; padding: 0; }
+.diff-unified .diff-line-same { background: transparent; }
+.diff-unified .diff-line-add { background: color-mix(in srgb, var(--green) 10%, transparent); }
+.diff-unified .diff-line-del { background: color-mix(in srgb, var(--red) 10%, transparent); }
+.diff-unified .diff-sign {
+  width: 20px; flex-shrink: 0; text-align: center;
+  user-select: none; font-weight: 700;
+}
+.diff-unified .diff-line-add .diff-sign { color: var(--green); }
+.diff-unified .diff-line-del .diff-sign { color: var(--red); }
+.diff-unified .diff-text { flex: 1; padding: 0 8px; white-space: pre-wrap; word-break: break-all; }

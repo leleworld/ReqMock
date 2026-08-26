@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   b64Encode, b64Decode, urlEncode, urlDecode,
   jsonEscape, jsonUnescape, unicodeEscape, unicodeUnescape,
   tsToDate, dateToTs, formatDate, genUuids
 } from '../utils/toolboxUtil.js';
-import { diffLines, diffStats } from '../utils/diffUtil.js';
+import { diffLines, diffStats, similarity, alignSideBySide } from '../utils/diffUtil.js';
 import { JbIcon } from './Icons.jsx';
 
 /** 工具清单：侧栏工具箱展示，每个工具在主区以独立标签页打开 */
@@ -172,48 +172,167 @@ function UuidTool() {
 function DiffTool() {
   const [left, setLeft] = useState('');
   const [right, setRight] = useState('');
-  const [result, setResult] = useState(null);
+  const [view, setView] = useState('split'); // 'split' | 'unified'
+  const [ignoreWs, setIgnoreWs] = useState(false);
+  const [fmtJson, setFmtJson] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // 折叠连续相同行
+  const leftPaneRef = useRef(null);
+  const rightPaneRef = useRef(null);
+  const syncingRef = useRef(false);
 
-  const stats = useMemo(() => (result ? diffStats(result) : null), [result]);
+  // JSON 格式化
+  const formatIfJson = useCallback((text) => {
+    if (!fmtJson) return text;
+    try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return text; }
+  }, [fmtJson]);
+
+  const leftText = useMemo(() => formatIfJson(left), [left, fmtJson]);
+  const rightText = useMemo(() => formatIfJson(right), [right, fmtJson]);
+
+  // 实时对比（debounce）
+  const diff = useMemo(() => {
+    if (!leftText && !rightText) return null;
+    return diffLines(leftText, rightText, { ignoreWhitespace: ignoreWs });
+  }, [leftText, rightText, ignoreWs]);
+
+  const stats = useMemo(() => diff ? diffStats(diff) : null, [diff]);
+  const sim = useMemo(() => diff ? similarity(diff) : null, [diff]);
+  const aligned = useMemo(() => diff ? alignSideBySide(diff) : [], [diff]);
+
+  // 同步滚动
+  const handleScroll = (source) => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    const other = source === 'left' ? rightPaneRef.current : leftPaneRef.current;
+    const src = source === 'left' ? leftPaneRef.current : rightPaneRef.current;
+    if (other && src) { other.scrollTop = src.scrollTop; }
+    requestAnimationFrame(() => { syncingRef.current = false; });
+  };
+
+  // 折叠逻辑：连续 same 行超过 3 行时折叠中间部分
+  const buildRows = (rows) => {
+    if (!collapsed) return rows.map((r, i) => ({ ...r, _idx: i }));
+    const result = [];
+    let sameRun = [];
+    const flush = () => {
+      if (sameRun.length <= 6) {
+        sameRun.forEach((r) => result.push(r));
+      } else {
+        result.push(sameRun[0], sameRun[1], sameRun[2]);
+        result.push({ _fold: true, count: sameRun.length - 6 });
+        result.push(sameRun[sameRun.length - 3], sameRun[sameRun.length - 2], sameRun[sameRun.length - 1]);
+      }
+      sameRun = [];
+    };
+    for (let i = 0; i < rows.length; i++) {
+      const r = { ...rows[i], _idx: i };
+      if (r.left && r.left.type === 'same') { sameRun.push(r); }
+      else { if (sameRun.length) flush(); result.push(r); }
+    }
+    if (sameRun.length) flush();
+    return result;
+  };
+
+  const displayRows = useMemo(() => buildRows(aligned), [aligned, collapsed]);
+
+  /** 渲染字符级高亮 */
+  const renderChars = (chars, side) => {
+    if (!chars) return null;
+    return chars.map((c, i) => {
+      if (c.type === 'same') return <span key={i}>{c.text}</span>;
+      if (side === 'left' && c.type === 'del') return <span key={i} className="diff-char-del">{c.text}</span>;
+      if (side === 'right' && c.type === 'add') return <span key={i} className="diff-char-add">{c.text}</span>;
+      return null;
+    });
+  };
 
   return (
     <div className="tool-section diff-tool">
+      {/* 工具栏 */}
+      <div className="diff-toolbar">
+        <div className="diff-toolbar-left">
+          <button className={`seg-btn ${view === 'split' ? 'active' : ''}`} onClick={() => setView('split')}>分栏视图</button>
+          <button className={`seg-btn ${view === 'unified' ? 'active' : ''}`} onClick={() => setView('unified')}>统一视图</button>
+        </div>
+        <div className="diff-toolbar-right">
+          <label className="inline-label"><input type="checkbox" checked={ignoreWs} onChange={(e) => setIgnoreWs(e.target.checked)} />忽略空白</label>
+          <label className="inline-label"><input type="checkbox" checked={fmtJson} onChange={(e) => setFmtJson(e.target.checked)} />格式化 JSON</label>
+          <label className="inline-label"><input type="checkbox" checked={collapsed} onChange={(e) => setCollapsed(e.target.checked)} />折叠相同行</label>
+          <button className="btn-secondary" title="交换左右" onClick={() => { const t = left; setLeft(right); setRight(t); }}>⇄ 交换</button>
+          <button className="btn-secondary" onClick={() => { setLeft(''); setRight(''); }}>清除</button>
+        </div>
+      </div>
+
+      {/* 输入区 */}
       <div className="diff-inputs">
         <textarea
           className="tool-textarea"
           placeholder="原始文本（左）"
           value={left}
           onChange={(e) => setLeft(e.target.value)}
+          spellCheck={false}
         />
         <textarea
           className="tool-textarea"
           placeholder="对比文本（右）"
           value={right}
           onChange={(e) => setRight(e.target.value)}
+          spellCheck={false}
         />
       </div>
-      <div className="tool-row">
-        <button className="btn-primary" onClick={() => setResult(diffLines(left, right))}>对比</button>
-        {stats && (
-          <span className="diff-stats">
-            <span className="diff-stat-add">+{stats.added}</span>
-            <span className="diff-stat-del">-{stats.removed}</span>
-          </span>
-        )}
-        {result && <button className="btn-secondary" onClick={() => setResult(null)}>清除结果</button>}
-      </div>
-      {result && (
-        <div className="diff-result">
-          {result.length === 0 || result.every((l) => l.type === 'same') ? (
-            <div className="empty-hint">两段文本完全一致</div>
-          ) : (
-            result.map((l, i) => (
-              <div key={i} className={`diff-line diff-${l.type}`}>
-                <span className="diff-sign">{l.type === 'add' ? '+' : l.type === 'del' ? '-' : ' '}</span>
-                {l.text || '\u00A0'}
+
+      {/* 统计栏 */}
+      {stats && (diff && diff.length > 0) && (
+        <div className="diff-stats-bar">
+          <span className="diff-stat-add">+{stats.added}</span>
+          <span className="diff-stat-del">−{stats.removed}</span>
+          <span className="diff-stat-mod">~{Math.min(stats.added, stats.removed)} 修改</span>
+          <span className="diff-stat-sim">相似度: {sim}%</span>
+          {stats.added === 0 && stats.removed === 0 && <span className="diff-stat-ok">✓ 完全一致</span>}
+        </div>
+      )}
+
+      {/* 分栏视图 */}
+      {diff && view === 'split' && (
+        <div className="diff-split">
+          <div className="diff-pane diff-pane-left" ref={leftPaneRef} onScroll={() => handleScroll('left')}>
+            {displayRows.map((row, i) => row._fold ? (
+              <div key={`fold-${i}`} className="diff-fold-line" onClick={() => setCollapsed(false)}>⋯ {row.count} 行相同</div>
+            ) : (
+              <div key={i} className={`diff-row diff-row-${row.left.type}`}>
+                <span className="diff-linenum">{row.left.lineNo ?? ''}</span>
+                <span className="diff-text">
+                  {row.left.chars ? renderChars(row.left.chars, 'left') : (row.left.text || '\u00A0')}
+                </span>
               </div>
-            ))
-          )}
+            ))}
+          </div>
+          <div className="diff-pane diff-pane-right" ref={rightPaneRef} onScroll={() => handleScroll('right')}>
+            {displayRows.map((row, i) => row._fold ? (
+              <div key={`fold-${i}`} className="diff-fold-line" onClick={() => setCollapsed(false)}>⋯ {row.count} 行相同</div>
+            ) : (
+              <div key={i} className={`diff-row diff-row-${row.right.type}`}>
+                <span className="diff-linenum">{row.right.lineNo ?? ''}</span>
+                <span className="diff-text">
+                  {row.right.chars ? renderChars(row.right.chars, 'right') : (row.right.text || '\u00A0')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 统一视图 */}
+      {diff && view === 'unified' && (
+        <div className="diff-unified">
+          {diff.length === 0 || diff.every((l) => l.type === 'same') ? (
+            <div className="empty-hint">两段文本完全一致</div>
+          ) : diff.map((l, i) => (
+            <div key={i} className={`diff-line diff-line-${l.type}`}>
+              <span className="diff-sign">{l.type === 'add' ? '+' : l.type === 'del' ? '−' : ' '}</span>
+              <span className="diff-text">{l.text || '\u00A0'}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
