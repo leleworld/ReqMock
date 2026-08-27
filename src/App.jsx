@@ -846,15 +846,25 @@ export default function App() {
 
 
 
-  // 切换标签/页面时重放主区入场动画：用 useAnimate 在原 DOM 上重放，不重挂载、保留子组件状态
+  // 主区切换反馈：只在"跨页面类型"（request↔mock↔welcome↔tool 等整树重挂载）时轻淡入，
+
+  // 且只淡入不位移；同级标签之间（request↔request）内容变、框架不变，一律不动画，
+
+  // 否则标题行 / 保存 / URL 栏 / 发送 / 子页签会整体滑 5px 并闪一下
 
   const [pageScope, animatePage] = useAnimate();
 
+  const prevTabKindRef = useRef(null);
+
   useEffect(() => {
 
-    if (!pageScope.current) return;
+    const kindChanged = prevTabKindRef.current !== curTab.kind;
 
-    animatePage(pageScope.current, { opacity: [0, 1], y: [5, 0] }, { duration: 0.16, ease: 'easeOut' });
+    prevTabKindRef.current = curTab.kind;
+
+    if (!kindChanged || !pageScope.current) return;
+
+    animatePage(pageScope.current, { opacity: [0.72, 1] }, { duration: 0.12, ease: 'easeOut' });
 
   }, [curTab.id]);
 
