@@ -500,12 +500,14 @@ export default function ResponsePanel({
           {tab === 'body' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
         </button>
         <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
-          Headers ({Object.keys(response.headers).length})
+          Headers
+          <span className="tab-badge">{Object.keys(response.headers).length}</span>
           {tab === 'headers' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
         </button>
         {setCookies.length > 0 && (
           <button className={tab === 'cookies' ? 'active' : ''} onClick={() => setTab('cookies')}>
-            Cookies ({setCookies.length})
+            Cookies
+            <span className="tab-badge">{setCookies.length}</span>
             {tab === 'cookies' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}
@@ -517,7 +519,8 @@ export default function ResponsePanel({
         )}
         {trace.length > 1 && (
           <button className={tab === 'trace' ? 'active' : ''} onClick={() => setTab('trace')}>
-            重定向 ({trace.length - 1})
+            重定向
+            <span className="tab-badge">{trace.length - 1}</span>
             {tab === 'trace' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         )}

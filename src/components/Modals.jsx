@@ -123,7 +123,8 @@ export function CollectionSettingsModal({ collection, onConfirm, onClose }) {
       <div className="editor-tabs modal-tabs">
         <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>常规</button>
         <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
-          公共 Headers{headers.filter((h) => h.key).length > 0 && ` (${headers.filter((h) => h.key).length})`}
+          公共 Headers
+          <span className="tab-badge">{headers.filter((h) => h.key).length || ''}</span>
         </button>
         <button className={tab === 'auth' ? 'active' : ''} onClick={() => setTab('auth')}>
           授权{auth.type !== 'none' && <span className="dot-indicator" />}

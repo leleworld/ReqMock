@@ -489,17 +489,21 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     <div className="request-editor">
       <div className="editor-tabs">
         {[
-          ['params', `Params${request.params.filter(p => p.key).length > 0 ? ` (${request.params.filter(p => p.key).length})` : ''}`],
-          ['body', <>Body{request.bodyType !== 'none' && <span className="dot-indicator" />}</>],
-          ['headers', `Headers${request.headers.filter(h => h.key).length > 0 ? ` (${request.headers.filter(h => h.key).length})` : ''}`],
-          ['auth', <>授权{auth.type !== 'none' && <span className="dot-indicator" />}</>],
-          ['script', <>脚本{(request.preScript || request.postScript) && <span className="dot-indicator" />}</>],
-          ['settings', <>设置{settingsCount > 0 && <span className="dot-indicator" />}</>],
-          ['doc', <>文档{request.doc && <span className="dot-indicator" />}</>],
-          ['examples', `示例${(request.examples || []).length > 0 ? ` (${request.examples.length})` : ''}`]
-        ].map(([key, label]) => (
+          /* [页签 key, 文案, 计数, 状态点]：计数与状态点一律绝对定位（脱流），按钮宽度只跟文案走，
+              切换不同请求时后面的页签不会因 " (3)" 出现/消失而整体横移 */
+          ['params', 'Params', request.params.filter((p) => p.key).length, false],
+          ['body', 'Body', 0, request.bodyType !== 'none'],
+          ['headers', 'Headers', request.headers.filter((h) => h.key).length, false],
+          ['auth', '授权', 0, auth.type !== 'none'],
+          ['script', '脚本', 0, !!(request.preScript || request.postScript)],
+          ['settings', '设置', 0, settingsCount > 0],
+          ['doc', '文档', 0, !!request.doc],
+          ['examples', '示例', (request.examples || []).length, false]
+        ].map(([key, label, count, hasDot]) => (
           <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
             {label}
+            <span className="tab-badge">{count > 0 ? count : ''}</span>
+            {hasDot && <span className="dot-indicator" />}
             {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>
         ))}
