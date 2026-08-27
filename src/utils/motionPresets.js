@@ -9,8 +9,8 @@ export const paneEase = [0.32, 0.72, 0, 1];
 /** 主区页面/响应内容入场：轻微上移淡入 */
 export const pageIn = {
   initial: { opacity: 0 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.1, ease: paneEase }
+  animate: { opacity: 1 },
+  transition: { duration: 0.15, ease: paneEase }
 };
 
 /** 弹窗遮罩淡入淡出 */
@@ -74,14 +74,14 @@ export const tabIn = {
  */
 export const paneSlide = {
   variants: {
-    enter: (dir) => ({ opacity: 0, x: (dir || 1) * 4 }),
-    center: { opacity: 1, x: 0 },
-    exit: (dir) => ({ opacity: 0, x: (dir || 1) * -3, pointerEvents: 'none', transition: { duration: 0.08, ease: paneEase } })
+    enter: () => ({ opacity: 0 }),
+    center: { opacity: 1 },
+    exit: () => ({ opacity: 0, pointerEvents: 'none', transition: { duration: 0.08, ease: paneEase } })
   },
   initial: 'enter',
   animate: 'center',
   exit: 'exit',
-  transition: { duration: 0.12, ease: paneEase }
+  transition: { duration: 0.15, ease: paneEase }
 };
 
 /** 页签左右抽拉切换：配合 custom={dir} 使用，dir=1 从右滑入、-1 从左滑入 */
