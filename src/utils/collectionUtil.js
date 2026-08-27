@@ -275,6 +275,28 @@ export function findRequestPath(collections, reqId) {
   return null;
 }
 
+/**
+ * 查找请求的祖先节点 id 链（集合 → 各级文件夹，含直接父节点），
+ * 供「在集合中定位当前请求」强制展开折叠节点；未保存到集合时返回 null
+ */
+export function findRequestAncestorIds(collections, reqId) {
+  if (!reqId) return null;
+  const walk = (node, chain) => {
+    const next = [...chain, node.id];
+    if ((node.requests || []).some((r) => r.id === reqId)) return next;
+    for (const f of node.folders || []) {
+      const found = walk(f, next);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const c of collections || []) {
+    const found = walk(c, []);
+    if (found) return found;
+  }
+  return null;
+}
+
 // ---- 导入导出 ----
 
 /** 导出单个集合为原生格式 JSON 字符串 */

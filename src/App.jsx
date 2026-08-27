@@ -3390,6 +3390,8 @@ export default function App() {
 
         activeRequestId={activeRequest ? activeRequest.id : null}
 
+        onToast={showToast}
+
         onOpenRequest={handleOpenRequest}
 
         onOpenHistory={handleOpenHistoryItem}

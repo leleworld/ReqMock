@@ -2848,6 +2848,22 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* 定位当前请求：目标行高亮闪一下（1.2s 后 JS 移除 .tree-reveal，自然回落常态） */
+
+.tree-row.tree-reveal { animation: treeReveal 1.2s ease-out; }
+
+
+
+@keyframes treeReveal {
+
+  0%, 22% { background: color-mix(in srgb, var(--accent) 38%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  100% { background: transparent; box-shadow: inset 0 0 0 1px transparent; }
+
+}
+
+
+
 .tree-collection-row { font-weight: 600; }
 
 

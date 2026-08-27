@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { countRequests } from '../utils/collectionUtil.js';
+import { countRequests, findRequestAncestorIds } from '../utils/collectionUtil.js';
 import { JbIcon } from './Icons.jsx';
 
 // 拖拽自定义 MIME：与文件拖入导入（Files）区分，仅树内移动响应
@@ -42,6 +42,37 @@ export default function CollectionTree(props) {
   } = props;
   const q = (filter || '').trim().toLowerCase();
   const shown = q ? collections.map((c) => filterNode(c, q)).filter(Boolean) : collections;
+
+  // ===== 定位当前请求：reveal = { reqId, tick }，tick 递增即触发一次定位 =====
+  // 被强制展开过的祖先记在这里，定位后保持展开状态（不随下次定位收回，避免树来回跳）
+  const [forceOpenIds, setForceOpenIds] = useState(() => new Set());
+  const revealTick = props.reveal && props.reveal.tick;
+  useEffect(() => {
+    const reqId = props.reveal && props.reveal.reqId;
+    if (!reqId || !revealTick) return;
+    const ids = findRequestAncestorIds(collections, reqId);
+    if (!ids) return; // 未保存到集合：由按钮侧提示，这里不动树
+    setForceOpenIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+    // 等展开与（可能的）清空过滤重渲染落地后再滚动
+    const timer = setTimeout(() => {
+      const row = document.querySelector(`.tree-request[data-request-id="${reqId}"]`);
+      const box = row && row.closest('.side-panel-body');
+      if (!row) return;
+      if (box) {
+        const rr = row.getBoundingClientRect();
+        const rb = box.getBoundingClientRect();
+        if (rr.top < rb.top) box.scrollTop -= rb.top - rr.top + 8;
+        else if (rr.bottom > rb.bottom) box.scrollTop += rr.bottom - rb.bottom + 8;
+      }
+      row.classList.add('tree-reveal');
+      setTimeout(() => row.classList.remove('tree-reveal'), 1200);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [revealTick]);
 
   // ===== 右键上下文菜单状态 =====
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, nodeType, nodeId, nodeName, collectionId }
@@ -133,7 +164,7 @@ export default function CollectionTree(props) {
       )}
       {q && collections.length > 0 && shown.length === 0 && <div className="empty-hint">无匹配结果</div>}
       {shown.map((col) => (
-        <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} onContextMenu={handleContextMenu} />
+        <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} forceOpenIds={forceOpenIds} onContextMenu={handleContextMenu} />
       ))}
 
       {/* 右键上下文菜单 */}
@@ -156,12 +187,17 @@ function filterNode(node, q) {
 }
 
 function CollectionNode(props) {
-  const { collection, forceOpen, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
+  const { collection, forceOpen, forceOpenIds, onCollectionSettings, onExportCollection, onDeleteCollection, onAddFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
   const [open, setOpen] = useState(true);
   const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
   const rowRef = useRef(null);
   const expandTimer = useRef(null);
   const isOpen = open || forceOpen;
+
+  // 定位时把本节点自身展开态打开（一次性），之后仍可正常手动折叠
+  useEffect(() => {
+    if (forceOpenIds && forceOpenIds.has(collection.id)) setOpen(true);
+  }, [forceOpenIds]);
 
   const clearExpand = () => { if (expandTimer.current) { clearTimeout(expandTimer.current); expandTimer.current = null; } };
 
@@ -232,13 +268,18 @@ function CollectionNode(props) {
 }
 
 function FolderNode(props) {
-  const { folder, node: parentNode, depth, forceOpen, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
+  const { folder, node: parentNode, depth, forceOpen, forceOpenIds, onAddFolder, onRenameNode, onDeleteFolder, onOpenRunner, onMoveRequest, onMoveFolder, onContextMenu } = props;
   const [open, setOpen] = useState(false);
   const [dropState, setDropState] = useState(null); // 'into' | 'before' | 'after'
   const [dragging, setDragging] = useState(false);
   const rowRef = useRef(null);
   const expandTimer = useRef(null);
   const isOpen = open || forceOpen;
+
+  // 定位时把本文件夹自身展开态打开（一次性），之后仍可正常手动折叠
+  useEffect(() => {
+    if (forceOpenIds && forceOpenIds.has(folder.id)) setOpen(true);
+  }, [forceOpenIds]);
 
   const clearExpand = () => { if (expandTimer.current) { clearTimeout(expandTimer.current); expandTimer.current = null; } };
 
@@ -386,6 +427,7 @@ function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDelete
   return (
     <div
       ref={rowRef}
+      data-request-id={req.id}
       className={`tree-row tree-request${req.id === activeRequestId ? ' selected' : ''}${dropZone === 'before' ? ' drop-before' : ''}${dropZone === 'after' ? ' drop-after' : ''}${dragging ? ' dragging' : ''}`}
       style={{ paddingLeft: depth * 14 + 14 }}
       onClick={() => onOpenRequest(req)}
