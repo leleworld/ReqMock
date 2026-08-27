@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { GROUP_COLORS } from '../utils/tabGroupUtil.js';
-import { tabIn } from '../utils/motionPresets.js';
 import { JbIcon } from './Icons.jsx';
 import { nameFromUrl } from '../utils/collectionUtil.js';
 import { reqDisplayName } from '../App.jsx';
@@ -256,7 +254,7 @@ export default function TabBar({
         i++;
       }
       out.push(
-        <motion.div
+        <div
           key={'grp-' + group.id}
           data-group-id={group.id}
           className={`tab-group ${group.collapsed ? 'collapsed' : ''} ${group.pinned ? 'is-pinned' : ''}`}
@@ -290,20 +288,12 @@ export default function TabBar({
             <span className="tab-group-count">{members.length}</span>
           </div>
           {/* 成员区折叠/展开走弹簧宽度动画，收起时只留组牌 */}
-          <AnimatePresence initial={false}>
-            {!group.collapsed && (
-              <motion.div
-                className="tab-group-members"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 'auto', opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-              >
-                {members.map((t) => renderTab(t, isPinnedTab(t)))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+          {!group.collapsed && (
+            <div className="tab-group-members">
+              {members.map((t) => renderTab(t, isPinnedTab(t)))}
+            </div>
+          )}
+        </div>
       );
     }
     return out;
