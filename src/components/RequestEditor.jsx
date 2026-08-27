@@ -511,7 +511,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       </div>
 
       <div className="editor-content">
-        <div className="editor-pane" key={tab}>
+        <div className="editor-pane">
         {tab === 'params' && (
           <KeyValueEditor
             rows={request.params}
