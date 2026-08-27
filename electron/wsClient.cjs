@@ -1,8 +1,8 @@
 /**
  * WebSocket 连接管理器（主进程）
  * 走主进程的原因：浏览器 WebSocket 无法自定义握手 Header，node 端 ws 可以。
- * 事件（open/message/close/error）通过构造时传入的 onEvent 回调上抛，
- * 事件结构：{ id, type, direction: 'in'|'out'|'sys', data, time }
+ * 事件（connecting/open/message/close/error）通过构造时传入的 onEvent 回调上抛，
+ * 事件结构：{ id, type, direction: 'in'|'out'|'sys', data, binary?, size?, time }
  */
 const WebSocket = require('ws');
 
@@ -12,8 +12,8 @@ class WsManager {
     this.connections = new Map(); // id -> WebSocket
   }
 
-  emit(id, type, data, direction = 'sys') {
-    this.onEvent({ id, type, direction, data: data ?? '', time: Date.now() });
+  emit(id, type, data, direction = 'sys', extra = {}) {
+    this.onEvent({ id, type, direction, data: data ?? '', time: Date.now(), ...extra });
   }
 
   /** 建立连接；同 id 已存在时先关闭旧连接 */
@@ -24,16 +24,25 @@ class WsManager {
     for (const h of headers) {
       if (h && h.enabled !== false && h.key) headerMap[h.key] = h.value ?? '';
     }
+    const protoList = (protocols || []).filter(Boolean);
     let ws;
     try {
-      const protoList = (protocols || []).filter(Boolean);
       ws = new WebSocket(url, protoList.length ? protoList : undefined, { headers: headerMap });
     } catch (e) {
       return { ok: false, error: e.message };
     }
     this.connections.set(id, ws);
+    this.emit(id, 'connecting', `正在连接 ${url}${protoList.length ? `（子协议 ${protoList.join(', ')}）` : ''}`);
     ws.on('open', () => this.emit(id, 'open', `已连接 ${url}`));
-    ws.on('message', (data) => this.emit(id, 'message', data.toString(), 'in'));
+    ws.on('message', (data, isBinary) => {
+      if (isBinary) {
+        // 二进制帧不猜测内容，展示帧大小（Buffer 或分片数组）
+        const buf = Array.isArray(data) ? Buffer.concat(data) : data;
+        this.emit(id, 'message', `[二进制帧 ${buf.length} 字节]`, 'in', { binary: true, size: buf.length });
+      } else {
+        this.emit(id, 'message', data.toString(), 'in');
+      }
+    });
     ws.on('close', (code, reason) => {
       this.connections.delete(id);
       this.emit(id, 'close', `连接已关闭（code ${code}${reason && reason.length ? '，' + reason.toString() : ''}）`);

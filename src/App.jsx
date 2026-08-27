@@ -284,9 +284,25 @@ export default function App() {
 
   const [mockLogs, setMockLogs] = useState([]);
 
-  // WS/SSE 连接会话状态（不持久化）：tabId -> { connected, events: [] }
+  // WS/SSE 连接会话状态（不持久化）：tabId -> { status, connected, connectedAt, events: [], unread }
 
   const [rtState, setRtState] = useState({});
+
+  // applyRtEvent 在挂载 effect 内闭包，读当前激活标签用 ref 避免过期
+
+  const activeTabIdRef = useRef(null);
+
+  useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
+
+  // 切换标签：顺带清零 WS/SSE 标签的未读消息徽标
+
+  const selectTab = useCallback((id) => {
+
+    setRtState((prev) => (prev[id] && prev[id].unread ? { ...prev, [id]: { ...prev[id], unread: 0 } } : prev));
+
+    setActiveTabId(id);
+
+  }, []);
 
   const [selectedRouteId, setSelectedRouteId] = useState(null);
 
@@ -560,13 +576,29 @@ export default function App() {
 
     });
 
-    // WS/SSE 事件汇总：按连接 id（= 标签 id）归档，open/close/error 同步连接状态
+    // WS/SSE 事件汇总：按连接 id（= 标签 id）归档，维护连接状态机与未读计数
 
     const applyRtEvent = (evt) => {
 
       setRtState((prev) => {
 
-        const cur = prev[evt.id] || { connected: false, events: [] };
+        const cur = prev[evt.id] || { status: 'idle', connected: false, connectedAt: 0, events: [], unread: 0 };
+
+        const status =
+
+          evt.type === 'connecting' ? 'connecting'
+
+            : evt.type === 'open' ? 'connected'
+
+            : evt.type === 'error' ? 'error'
+
+            : evt.type === 'close' ? 'disconnected'
+
+            : cur.status;
+
+        const isActive = evt.id === activeTabIdRef.current;
+
+        const isInMsg = evt.type === 'message' && evt.direction === 'in';
 
         return {
 
@@ -574,11 +606,17 @@ export default function App() {
 
           [evt.id]: {
 
-            connected: evt.type === 'open' ? true
+            status,
 
-              : (evt.type === 'close' || evt.type === 'error') ? false : cur.connected,
+            connected: status === 'connected',
 
-            events: [...cur.events, evt].slice(-500)
+            connectedAt: evt.type === 'open' ? evt.time
+
+              : (evt.type === 'close' || evt.type === 'error') ? 0 : cur.connectedAt,
+
+            events: [...cur.events, evt].slice(-500),
+
+            unread: isActive ? 0 : (isInMsg ? cur.unread + 1 : cur.unread)
 
           }
 
@@ -3476,7 +3514,9 @@ export default function App() {
 
           isTabDirty={isTabDirty}
 
-          onSelect={setActiveTabId}
+          rtState={rtState}
+
+          onSelect={selectTab}
 
           onClose={handleCloseTab}
 

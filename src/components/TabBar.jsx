@@ -15,7 +15,7 @@ import { reqDisplayName } from '../App.jsx';
  * 支持拖拽排序（HTML5 DnD）与双击重命名
  */
 export default function TabBar({
-  tabs, groups, activeTabId, tabMeta, isTabDirty,
+  tabs, groups, activeTabId, tabMeta, isTabDirty, rtState,
   onSelect, onClose, onCloneTab, onNew, onNewWs, onNewSse,
   onNewGroup, onAssignGroup, onLeaveGroup, onCloseAll, onCloseToRight, onCloseToLeft,
   onRenameGroup, onRecolorGroup, onToggleGroupCollapse, onUngroup, onCloseGroup,
@@ -200,6 +200,10 @@ export default function TabBar({
     const meta = isReq ? null : tabMeta(tab);
     const active = tab.id === activeTabId;
     const dirty = isReq && isTabDirty && isTabDirty(tab);
+    // WS/SSE 标签：连接状态点复用恒定 8px 的 .tab-mark 槽（不改变标签宽度），未读数用脱流徽标
+    const isRt = tab.kind === 'ws' || tab.kind === 'sse';
+    const rt = isRt && rtState ? rtState[tab.id] : null;
+    const rtStatus = rt ? rt.status : 'idle';
     return (
       <div
         key={tab.id}
@@ -243,6 +247,16 @@ export default function TabBar({
               ? <span className="tab-sending" title="发送中" />
               : dirty ? <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" /> : null}
           </span>
+        )}
+        {isRt && (
+          <span className="tab-mark" aria-hidden="true">
+            {rtStatus === 'connected' && <span className="tab-dirty rt-tab-on" />}
+            {rtStatus === 'connecting' && <span className="tab-sending rt-tab-connecting" />}
+            {rtStatus === 'error' && <span className="tab-dirty rt-tab-err" />}
+          </span>
+        )}
+        {isRt && rt && rt.unread > 0 && !active && (
+          <span className="tab-unread" title={`${rt.unread} 条新消息`}>{rt.unread > 99 ? '99+' : rt.unread}</span>
         )}
         {!pinned && (
           <span
