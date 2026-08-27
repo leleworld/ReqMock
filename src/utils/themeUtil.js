@@ -75,6 +75,11 @@ export function normalizeSettings(s) {
 /** 把主题设置应用到文档根元素 */
 export function applyTheme(settings) {
   const { theme, accent } = normalizeSettings(settings);
+  // 临时启用过渡动画，主题切换完成后移除
+  document.documentElement.classList.add('theme-transitioning');
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.accent = accent;
+  setTimeout(() => {
+    document.documentElement.classList.remove('theme-transitioning');
+  }, 300);
 }

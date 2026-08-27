@@ -13,11 +13,11 @@
 
 
 
-/* 主题切换过渡：仅 background-color / border-color 平滑渐变，不含 color 避免文字闪烁 */
+/* 主题切换过渡：仅在 .theme-transitioning 类存在时才启用，避免日常操作闪烁 */
 
 
 
-*, *::before, *::after {
+.theme-transitioning *, .theme-transitioning *::before, .theme-transitioning *::after {
 
 
 
@@ -28,16 +28,6 @@
 }
 
 
-
-/* 排除：代码编辑器内部、动画元素、输入框聚焦（避免性能问题） */
-
-
-
-.code-editor *, .cm-editor *, [class*="motion"], input:focus, textarea:focus {
-
-
-
-  transition: none !important;
 
 
 
