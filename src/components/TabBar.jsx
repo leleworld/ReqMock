@@ -261,9 +261,6 @@ export default function TabBar({
           data-group-id={group.id}
           className={`tab-group ${group.collapsed ? 'collapsed' : ''} ${group.pinned ? 'is-pinned' : ''}`}
           style={{ '--group-color': group.color }}
-          layout
-          {...tabIn}
-          transition={{ type: 'spring', stiffness: 420, damping: 34 }}
         >
           <div
             className="tab-group-chip"

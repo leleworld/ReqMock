@@ -3477,7 +3477,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; overflow: hidden;
 
 
 
