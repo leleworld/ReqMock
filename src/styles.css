@@ -2120,6 +2120,22 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* ==== 滚动条槽位常驻：避免内容高度变化时 8px 滚动条出现/消失挤压内容宽度（切页签横向抖动的来源） ==== */
+
+.editor-pane, .cm-scroller, .side-panel-body, .mock-editor, .env-panel,
+
+.cookie-body, .tools-body, .settings-page-body, .modal-body, .console-body,
+
+.log-list, .util-vars, .notice-list, .fail-view {
+
+  scrollbar-gutter: stable;
+
+  overscroll-behavior: contain;
+
+}
+
+
+
 .editor-content { flex: 1; overflow: hidden; padding: 12px; display: grid; position: relative; }
 
 
@@ -3608,7 +3624,9 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; width: 0; margin: 0; overflow: hidden; }
+/* 隐藏时只置灰不塌宽度：否则 overflowing 翻转（如分组展开动画中）会把整个标签列表左右推开十几 px */
+
+.tab-scroll-btn.is-hidden { visibility: hidden; pointer-events: none; }
 
 
 
@@ -3689,6 +3707,26 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 .tab-icon { color: var(--accent); flex-shrink: 0; display: inline-flex; }
+
+
+
+/* 标签状态标记占位槽：宽度恒定 8px，脏标记/发送中圆点在槽内切换，
+
+   标记的出现与消失不再改变标签宽度、不推开兄弟标签 */
+
+.tab-mark {
+
+
+
+  width: 8px; height: 8px; flex-shrink: 0;
+
+
+
+  display: inline-flex; align-items: center; justify-content: center;
+
+
+
+}
 
 
 

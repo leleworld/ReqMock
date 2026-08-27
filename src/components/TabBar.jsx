@@ -82,7 +82,12 @@ export default function TabBar({
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  // 激活标签自动滚入可视区：被挤出视区时平滑滚动到位；折叠组内的激活标签回退滚到组牌
+  // 激活标签自动滚入可视区：只滚动 .tab-list 自身。
+
+  // 不用 scrollIntoView —— 它会向上冒泡滚动 overflow:hidden 的祖先（.app-body/.main-area/.page-body），
+
+  // 这类容器被脚本拨走 scrollTop 后没有滚动条，用户无法滚回来
+
   useEffect(() => {
     const list = listRef.current;
     if (!list || !activeTabId) return;
@@ -91,7 +96,13 @@ export default function TabBar({
       || (activeTab && activeTab.groupId
         ? list.querySelector(`[data-group-id="${activeTab.groupId}"]`)
         : null);
-    if (target) target.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    if (!target) return;
+    const lr = list.getBoundingClientRect();
+    const tr = target.getBoundingClientRect();
+    let delta = 0;
+    if (tr.left < lr.left) delta = tr.left - lr.left - 8;
+    else if (tr.right > lr.right) delta = tr.right - lr.right + 8;
+    if (delta) list.scrollTo({ left: list.scrollLeft + delta, behavior: 'smooth' });
   }, [activeTabId, tabs.length]);
 
   useEffect(() => {
@@ -225,8 +236,14 @@ export default function TabBar({
         ) : (
           <span className="tab-name" onDoubleClick={() => handleDoubleClick(tab)}>{isReq ? reqDisplayName(tab.request) : meta.label}</span>
         )}
-        {isReq && tab.sending && <span className="tab-sending" title="发送中" />}
-        {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" />}
+        {isReq && (
+          /* 固定 8px 占位槽：脏标记/发送中只在槽内出现，不改变标签宽度、不推开兄弟标签 */
+          <span className="tab-mark" aria-hidden="true">
+            {tab.sending
+              ? <span className="tab-sending" title="发送中" />
+              : dirty ? <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" /> : null}
+          </span>
+        )}
         {!pinned && (
           <span
             className="tab-close"

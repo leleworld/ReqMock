@@ -550,7 +550,7 @@ export default function App() {
 
     });
 
-    if (window.api.appVersion) window.api.appVersion().then(setAppVersion);
+    if (window.api.appVersion) window.api.appVersion().then((v) => setAppVersion(typeof v === 'string' ? v : ''));
 
     window.api.mockStatus().then((s) => setMockRunning(s.running));
 

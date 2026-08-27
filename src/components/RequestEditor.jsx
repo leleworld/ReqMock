@@ -9,7 +9,6 @@ import { AUTH_TYPES, newAuth, previewAuthHeader } from '../utils/authUtil.js';
 import { parseCurl } from '../utils/curlUtil.js';
 import { renderMarkdown } from '../utils/markdownUtil.js';
 import { COMMON_HEADERS } from '../utils/headerNames.js';
-import { paneSlide } from '../utils/motionPresets.js';
 import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildVariablesSkeleton } from '../utils/graphqlUtil.js';
 import { resolveVars } from '../utils/envUtil.js';
 import { applyPresetToHeaders } from '../utils/headerPresets.js';

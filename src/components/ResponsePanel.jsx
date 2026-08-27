@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { motion, LayoutGroup, AnimatePresence } from 'framer-motion';
-import { pageIn, paneSlide } from '../utils/motionPresets.js';
+import { motion, LayoutGroup } from 'framer-motion';
 import { tokenizeJson, HIGHLIGHT_MAX_LENGTH } from '../utils/highlightUtil.js';
 import JsonFormatWorker from '../utils/jsonFormatWorker.js?worker';
 import { tryDecodeSelection } from '../utils/toolboxUtil.js';

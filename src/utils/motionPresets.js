@@ -1,6 +1,18 @@
 /**
  * framer-motion 统一动效参数（克制微动：120–200ms、4–8px 位移）
  * 所有组件从这里取预设，保证全应用动效节奏一致
+ *
+ * 使用约束（重要）：
+ *   - 位移类预设（paneSlide / tabSlide / panelSlide）只用于「方向性导航」：
+ *     侧栏活动项切换、抽屉开合、弹层升起。
+ *   - 禁止把位移/淡入挂在主区框架容器上（.page-body / .request-editor / .response-panel）：
+ *     同级标签之间（request↔request）属于「平行跳转」，标题行、保存、URL 栏、发送、子页签
+ *     这些不变化的元素一旦被整体位移 + 淡入，观感就是「界面在抖」。
+ *     跨页面类型（request↔mock↔welcome）才允许极短的纯 opacity 淡入。
+ *   - 随数据变化的计数 / 状态点不得占用文档流宽度（用 .tab-badge 绝对定位，
+ *     或 visibility 占位），否则切标签时相邻按钮会整体横移。
+ *
+ * 现况：pageIn / tabSlide 已无引用，仅保留作导航动效备选。
  */
 
 /** 全应用统一减速曲线（Material standard decelerate）：起步快、收尾柔，消除线性机械感 */
