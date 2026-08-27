@@ -4,6 +4,7 @@ import { GROUP_COLORS } from '../utils/tabGroupUtil.js';
 import { tabIn } from '../utils/motionPresets.js';
 import { JbIcon } from './Icons.jsx';
 import { nameFromUrl } from '../utils/collectionUtil.js';
+import { reqDisplayName } from '../App.jsx';
 
 /**
  * 主区统一标签栏：请求 / 环境 / Cookie / Mock / 工具都以标签页承载（Reqable 式）
@@ -169,14 +170,14 @@ export default function TabBar({
   const handleDoubleClick = (tab) => {
     if (!tab.kind || tab.kind === 'request') {
       setEditingTabId(tab.id);
-      setEditingName(tab.request.name || nameFromUrl(tab.request.url));
+      setEditingName(reqDisplayName(tab.request));
     }
   };
 
   const handleRenameConfirm = (tab) => {
     const trimmed = editingName.trim();
     setEditingTabId(null);
-    if (trimmed && trimmed !== (tab.request.name || nameFromUrl(tab.request.url)) && onRenameTab) {
+    if (trimmed && trimmed !== reqDisplayName(tab.request) && onRenameTab) {
       onRenameTab(tab.id, trimmed);
     }
   };
@@ -222,7 +223,7 @@ export default function TabBar({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="tab-name" onDoubleClick={() => handleDoubleClick(tab)}>{isReq ? (tab.request.name || nameFromUrl(tab.request.url)) : meta.label}</span>
+          <span className="tab-name" onDoubleClick={() => handleDoubleClick(tab)}>{isReq ? reqDisplayName(tab.request) : meta.label}</span>
         )}
         {isReq && tab.sending && <span className="tab-sending" title="发送中" />}
         {dirty && !tab.sending && <span className="tab-dirty" title="有未保存的修改 (Ctrl+S 保存)" />}
@@ -385,7 +386,7 @@ export default function TabBar({
                 {isReq
                   ? <span className={`method method-${t.request.method}`}>{t.request.method}</span>
                   : <JbIcon name={meta.icon} size={14} className="tab-icon" />}
-                <span className="ctx-label">{isReq ? (t.request.name || nameFromUrl(t.request.url)) : meta.label}</span>
+                <span className="ctx-label">{isReq ? reqDisplayName(t.request) : meta.label}</span>
                 {g && <span className="ctx-dot" style={{ background: g.color }} title={`分组「${g.name}」`} />}
               </div>
             );
