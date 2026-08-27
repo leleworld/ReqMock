@@ -265,11 +265,17 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     setTabRaw(key);
   };
 
-  // 打开请求时自动定焦：params 有值 → params，body 有值 → body
-  const requestIdRef = useRef(request && request.id);
-  if (request && request.id !== requestIdRef.current) {
-    requestIdRef.current = request.id;
-  }
+  // 切到另一个请求时按方法定焦子页签：GET → Params，POST → Body，其余方法保持用户当前所在页签。
+  // 仅在「请求身份变化」时生效：同一请求内改方法不会抢走焦点。
+  const focusReqIdRef = useRef(null);
+  useEffect(() => {
+    const id = request && request.id;
+    if (!id || id === focusReqIdRef.current) return;
+    focusReqIdRef.current = id;
+    const m = (request.method || '').toUpperCase();
+    if (m === 'GET') setTab('params');
+    else if (m === 'POST') setTab('body');
+  }, [request]);
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // Headers 预设：下拉菜单定位 + 管理弹窗开关
