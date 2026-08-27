@@ -511,7 +511,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       </div>
 
       <div className="editor-content">
-        <AnimatePresence initial={false} mode="wait">
+        <AnimatePresence initial={false} mode="sync">
         <motion.div className="editor-pane" key={tab} {...paneSlide}>
         {tab === 'params' && (
           <KeyValueEditor

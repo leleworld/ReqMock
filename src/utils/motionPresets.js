@@ -74,14 +74,14 @@ export const tabIn = {
  */
 export const paneSlide = {
   variants: {
-    enter: () => ({ opacity: 0 }),
+    enter: { opacity: 0 },
     center: { opacity: 1 },
-    exit: () => ({ opacity: 0, pointerEvents: 'none', transition: { duration: 0.08, ease: paneEase } })
+    exit: { opacity: 1 }
   },
   initial: 'enter',
   animate: 'center',
   exit: 'exit',
-  transition: { duration: 0.15, ease: paneEase }
+  transition: { duration: 0.13, ease: paneEase }
 };
 
 /** 页签左右抽拉切换：配合 custom={dir} 使用，dir=1 从右滑入、-1 从左滑入 */
