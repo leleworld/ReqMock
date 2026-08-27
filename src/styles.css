@@ -3505,11 +3505,11 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  display: flex; align-items: center; gap: 2px;
+  display: flex; align-items: center; gap: 2px; scrollbar-width: none;
 
 
 
-  width: 100%; overflow-x: auto;
+  width: 100%; overflow-x: auto; overflow-y: hidden;
 
 
 
@@ -3901,7 +3901,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.tab-list::-webkit-scrollbar { height: 5px; }
+.tab-list::-webkit-scrollbar { height: 0; display: none; }
 
 
 
