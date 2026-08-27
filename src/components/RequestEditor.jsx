@@ -511,8 +511,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       </div>
 
       <div className="editor-content">
-        <AnimatePresence initial={false} mode="sync">
-        <motion.div className="editor-pane" key={tab} {...paneSlide}>
+        <div className="editor-pane" key={tab}>
         {tab === 'params' && (
           <KeyValueEditor
             rows={request.params}
@@ -854,8 +853,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
             onToMock={onExampleToMock}
           />
         )}
-        </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
       {presetMgrOpen && (
         <HeaderPresetsModal

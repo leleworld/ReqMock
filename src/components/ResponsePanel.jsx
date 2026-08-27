@@ -478,7 +478,7 @@ export default function ResponsePanel({
   const diffBases = historyList.filter((h) => h.response !== response && h.response.ok);
 
   return (
-    <motion.div className="response-panel" {...pageIn}>
+    <div className="response-panel">
       <div className="response-status">
         <span className={`status-tag ${statusClass}`}>{response.status} {response.statusText}</span>
         <span className="meta">HTTP/{response.httpVersion || '1.1'}</span>
@@ -600,8 +600,7 @@ export default function ResponsePanel({
 
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
         {/* 页签/视图切换时方向滑动交叉淡出；滚动容器下沉到 pane 层；重内容延迟一帧挂载 */}
-        <AnimatePresence initial={false} mode="sync">
-        <motion.div className="response-pane" key={paneKey} {...paneSlide}>
+        <div className="response-pane" key={paneKey}>
         {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
         {tab === 'body' && view === 'pretty' && (
           <DeferredMount>
@@ -668,8 +667,7 @@ export default function ResponsePanel({
         {tab === 'timings' && response.timings && <TimingsView timings={response.timings} />}
         {tab === 'trace' && <TraceView trace={trace} />}
         {tab === 'tests' && scriptResult && <ScriptResultView result={scriptResult} />}
-        </motion.div>
-        </AnimatePresence>
+        </div>
       </div>
 
       {decodeTip && (
@@ -681,7 +679,7 @@ export default function ResponsePanel({
           <pre className="decode-tip-body">{decodeTip.text}</pre>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -708,7 +706,7 @@ function FailureView({ response, scriptResult, historyBtn, layoutBtn, onRetry, o
   };
 
   return (
-    <motion.div className="response-panel" {...pageIn}>
+    <div className="response-panel">
       <div className="response-status">
         <span className="status-tag status-bad">请求失败</span>
         {explain.code && <span className="fail-code-tag">{explain.code}</span>}
@@ -803,7 +801,7 @@ function FailureView({ response, scriptResult, historyBtn, layoutBtn, onRetry, o
 
         {scriptResult && <ScriptResultView result={scriptResult} />}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
