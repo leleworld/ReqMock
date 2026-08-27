@@ -268,14 +268,9 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
 
   // 打开请求时自动定焦：params 有值 → params，body 有值 → body
   const requestIdRef = useRef(request && request.id);
-  useEffect(() => {
-    if (!request || request.id === requestIdRef.current) return;
+  if (request && request.id !== requestIdRef.current) {
     requestIdRef.current = request.id;
-    const hasParams = (request.params || []).some(p => p.key);
-    const hasBody = request.bodyType && request.bodyType !== 'none' && request.body;
-    if (hasParams) setTabRaw('params');
-    else if (hasBody) setTabRaw('body');
-  }, [request && request.id]);
+  }
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // Headers 预设：下拉菜单定位 + 管理弹窗开关
