@@ -269,6 +269,22 @@ export default function TabBar({
             title={`分组「${group.name}」（${members.length} 个标签）${group.pinned ? '· 已固定' : ''}\n单击折叠/展开，右键管理分组`}
             onClick={() => onToggleGroupCollapse(group.id)}
             onContextMenu={(e) => openMenu(e, { type: 'group', groupId: group.id })}
+            onDragOver={(e) => {
+              if (dragIdx === null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              e.currentTarget.classList.add('drag-over-group');
+            }}
+            onDragLeave={(e) => { e.currentTarget.classList.remove('drag-over-group'); }}
+            onDrop={(e) => {
+              e.currentTarget.classList.remove('drag-over-group');
+              if (dragIdx === null) return;
+              const draggedTab = tabs[dragIdx];
+              if (draggedTab && onAssignGroup) {
+                onAssignGroup(draggedTab.id, group.id);
+              }
+              setDragIdx(null);
+            }}
           >
             <JbIcon name={group.collapsed ? 'chevron-right' : 'chevron-down'} size={12} className="tab-group-caret" />
             {group.pinned && <JbIcon name="pin" size={11} className="tab-pin tab-pin-light" />}
