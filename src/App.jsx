@@ -774,6 +774,14 @@ export default function App() {
 
         else pushNotice('自动更新失败：' + evt.message, 'error');
 
+      } else if (evt.type === 'retry') {
+
+        pushNotice(`下载中断，${evt.delay / 1000}秒后第${evt.attempt}次重试…`, 'warn');
+
+      } else if (evt.type === 'resuming') {
+
+        pushNotice(`检测到上次未完成的更新 v${evt.version}，正在续传…`, 'info');
+
         manualUpdateCheckRef.current = false;
 
       }
