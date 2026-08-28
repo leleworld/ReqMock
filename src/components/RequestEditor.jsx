@@ -23,6 +23,24 @@ const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'd
 /** 页签行常驻显示的高频三项；其余收进右侧「更多页签」下拉，宽度不足时连常驻项也只留当前页签 */
 const PINNED_TABS = ['params', 'body', 'headers'];
 
+/** Body 类型：内部值 → 显示名 / 说明（下拉分组菜单用） */
+const BODY_TYPE_LABELS = {
+  none: '无 Body',
+  json: 'JSON',
+  text: '纯文本',
+  form: '表单 (x-www-form-urlencoded)',
+  multipart: 'Multipart 表单',
+  graphql: 'GraphQL'
+};
+const BODY_TYPE_DESC = {
+  none: 'GET 等无请求体场景',
+  json: 'application/json',
+  text: 'text/plain',
+  form: '键值对表单',
+  multipart: '含文件上传',
+  graphql: 'query + variables'
+};
+
 /**
  * 脚本片段插入浮层：按分类展示模板，选中后插入代码到目标字段
  */
@@ -325,6 +343,24 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   // 不做窄宽度塌缩：窄容器由 .editor-tabs 既有的横向滚动兜底，三项始终可见可点
   // 「更多页签」下拉：{ top, left } | null
   const [tabsMenu, setTabsMenu] = useState(null);
+
+  // Body 类型下拉：{ top, left } | null（复用同一套外部点击/Esc 关闭逻辑）
+  const [bodyMenu, setBodyMenu] = useState(null);
+
+  useEffect(() => {
+    if (!bodyMenu) return undefined;
+    const onDown = (e) => {
+      if (e.target instanceof Element && e.target.closest('.body-type-drop-wrap')) return;
+      setBodyMenu(null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setBodyMenu(null); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [bodyMenu]);
 
   // 点击面板外或按 Esc 关闭「更多页签」下拉
   useEffect(() => {
@@ -706,21 +742,42 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
         )}
         {tab === 'body' && (
           <div className="body-editor">
+            {/* 类型选择：下拉分组菜单（表单类 / 原始类 / 其他），当前项打勾 */}
             <div className="body-type-bar">
-              {['none', 'json', 'text', 'form', 'multipart', 'graphql'].map((t) => (
-                <label key={t}>
-                  <input
-                    type="radio"
-                    name="bodyType"
-                    checked={request.bodyType === t}
-                    onChange={() => set('bodyType', t)}
-                  />
-                  {t}
-                </label>
-              ))}
+              <span className="body-type-drop-wrap">
+                <button
+                  className={`body-type-drop${bodyMenu ? ' on' : ''}`}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setBodyMenu(bodyMenu ? null : { top: rect.bottom + 4, left: rect.left });
+                  }}
+                >
+                  {BODY_TYPE_LABELS[request.bodyType] || request.bodyType}
+                  <JbIcon name="caret-down" size={10} className="caret-icon" />
+                </button>
+                {bodyMenu && (
+                  <div className="ctx-menu body-type-menu" style={{ top: bodyMenu.top, left: bodyMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
+                    {[
+                      { title: '表单类', items: ['form', 'multipart'] },
+                      { title: '原始类', items: ['json', 'text', 'graphql'] },
+                      { title: '其他', items: ['none'] }
+                    ].map((grp) => (
+                      <React.Fragment key={grp.title}>
+                        <div className="ctx-menu-section">{grp.title}</div>
+                        {grp.items.map((t) => (
+                          <div key={t} className="ctx-item" onClick={() => { set('bodyType', t); setBodyMenu(null); }}>
+                            <span className="ctx-check">{request.bodyType === t ? <JbIcon name="checkmark" size={12} /> : ''}</span>
+                            <span className="ctx-label">{BODY_TYPE_LABELS[t] || t}</span>
+                            <span className="ctx-kbd">{BODY_TYPE_DESC[t]}</span>
+                          </div>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+              </span>
               {request.bodyType === 'json' && (
                 <>
-                  <span className="flex-spacer" />
                   <button className="btn-text" title="格式化 JSON" onClick={handleFormatJson}>格式化</button>
                 </>
               )}

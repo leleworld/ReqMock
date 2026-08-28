@@ -2339,7 +2339,67 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.body-type-bar { display: flex; gap: 16px; margin-bottom: 10px; color: var(--text-dim); flex-shrink: 0; }
+.body-type-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; color: var(--text-dim); flex-shrink: 0; }
+
+
+
+/* Body 类型下拉触发按钮：透明底 + 边框，与行内按钮一致（用户偏好忌实底色块） */
+
+.body-type-drop-wrap { position: relative; display: inline-flex; }
+
+
+
+.body-type-drop {
+
+
+
+  display: inline-flex; align-items: center; gap: 6px;
+
+
+
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius-s);
+
+
+
+  background: transparent; color: var(--text-dim); font-size: 13px; cursor: pointer;
+
+
+
+}
+
+
+
+.body-type-drop:hover, .body-type-drop.on { color: var(--text); background: var(--bg-hover); border-color: var(--accent); }
+
+
+
+.body-type-menu { min-width: 240px; }
+
+
+
+/* 下拉分组小标题：表单类 / 原始类 / 其他 */
+
+.ctx-menu-section {
+
+
+
+  padding: 6px 8px 3px;
+
+
+
+  font-size: 11px; color: var(--text-dim);
+
+
+
+  border-bottom: 1px solid var(--border);
+
+
+
+  margin-bottom: 2px;
+
+
+
+}
 
 
 
