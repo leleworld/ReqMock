@@ -3,6 +3,7 @@ import { collectRunnableRequests, parseRunnerData, runCollection, exportRunRepor
 import { findNode } from '../utils/collectionUtil.js';
 import { executeRequest } from '../utils/requestPipeline.js';
 import { JbIcon } from './Icons.jsx';
+import EmptyGuide from './EmptyGuide.jsx';
 
 /**
  * Collection Runner 面板：
@@ -217,7 +218,12 @@ export default function RunnerPanel(props) {
               <span className="item-name" title={request.url}>{request.name || request.url}</span>
             </label>
           ))}
-          {items.length === 0 && <div className="empty-hint">该节点下没有请求</div>}
+          {items.length === 0 && (
+            <EmptyGuide
+              title="该节点下没有可运行的请求"
+              desc="批量运行会递归收集该集合 / 文件夹及其子文件夹里的请求；未保存的请求与 Mock 占位请求不在范围内。先在集合树里把请求拖进来，或新建请求后 Ctrl+S 保存。"
+            />
+          )}
         </div>
 
         <div className="runner-section-title">运行选项</div>

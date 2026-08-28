@@ -80,6 +80,8 @@ import { normalizeSettings, applyTheme, watchSystemTheme } from './utils/themeUt
 
 import { initA11yClicks } from './utils/a11yClicks.js';
 
+import { describeError } from './utils/errorExplain.js';
+
 import { exportPostmanCollection, exportMarkdownDocs } from './utils/exportUtil.js';
 
 import { buildSampleWorkspace } from './utils/sampleData.js';
@@ -284,6 +286,8 @@ export default function App() {
   const [mockRunning, setMockRunning] = useState(false);
 
   const [mockBusy, setMockBusy] = useState(false); // Mock 启停进行中（按钮 loading 态）
+
+  const [importing, setImporting] = useState(false); // 集合导入解析中（集合树骨架屏，ioBusyRef 只防重入不驱动界面）
 
   const [mockLogs, setMockLogs] = useState([]);
 
@@ -785,9 +789,9 @@ export default function App() {
 
         setUpdateProgress(null);
 
-        if (manualUpdateCheckRef.current) showToast('检查更新失败：' + evt.message, 'error');
+        if (manualUpdateCheckRef.current) showToast('检查更新失败：' + describeError(evt.message), 'error');
 
-        else pushNotice('自动更新失败：' + evt.message, 'error');
+        else pushNotice('自动更新失败：' + describeError(evt.message), 'error');
 
       } else if (evt.type === 'retry') {
 
@@ -823,7 +827,7 @@ export default function App() {
 
       if (res.reason === 'dev') showToast('开发模式下不支持检查更新（需安装包环境）', 'warn');
 
-      else showToast('检查更新失败：' + (res.error || '未知错误'), 'error');
+      else showToast('检查更新失败：' + describeError(res.error), 'error');
 
     }
 
@@ -2469,7 +2473,7 @@ export default function App() {
 
     } catch (e) {
 
-      showToast('导入失败：' + e.message, 'error');
+      showToast('导入失败：' + describeError(e.message), 'error');
 
     }
 
@@ -2489,13 +2493,29 @@ export default function App() {
 
       if (!res.ok) {
 
-        if (!res.canceled) showToast('导入失败：' + res.error, 'error');
+        if (!res.canceled) showToast('导入失败：' + describeError(res.error), 'error');
 
         return;
 
       }
 
-      applyImportContent(res.content);
+      // 解析 + 重渲染是同步的，大集合会阻塞主线程；先让出一帧把骨架画出来再干活
+
+      setImporting(true);
+
+      setTimeout(() => {
+
+        try {
+
+          applyImportContent(res.content);
+
+        } finally {
+
+          setImporting(false);
+
+        }
+
+      }, 30);
 
     } finally {
 
@@ -2821,7 +2841,7 @@ export default function App() {
 
         } else {
 
-          showToast('启动失败: ' + result.error, 'error');
+          showToast('启动失败：' + describeError(result.error), 'error');
 
         }
 
@@ -3474,6 +3494,8 @@ export default function App() {
         activeRequestId={activeRequest ? activeRequest.id : null}
 
         onToast={showToast}
+
+        importing={importing}
 
         onOpenRequest={handleOpenRequest}
 

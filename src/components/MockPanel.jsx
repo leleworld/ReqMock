@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import KeyValueEditor from './KeyValueEditor.jsx';
 import CodeEditor from './CodeEditor.jsx';
+import EmptyGuide from './EmptyGuide.jsx';
 
 const METHODS = ['ANY', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
 
@@ -317,7 +318,15 @@ export default function MockPanel(props) {
             <button className="btn-text" onClick={onClearLogs}>清空</button>
           </div>
           <div className="log-list">
-            {mockLogs.length === 0 && <div className="empty-hint">暂无请求</div>}
+            {mockLogs.length === 0 && (
+              <EmptyGuide
+                title={mockRunning ? '还没有命中记录' : 'Mock 服务未启动'}
+                desc={mockRunning
+                  ? `客户端请求 http://localhost:${mock.port} 下配置的路由后，命中与未命中会实时列在这里。也可以在接口响应面板点「响应转 Mock」，用真实报文快速造数据。`
+                  : '启动后按下方路由表拦截请求，命中记录会实时列在这里，便于对照报文调试前端逻辑。'}
+                actions={mockRunning ? [] : [{ label: mockBusy ? '启动中…' : '启动 Mock 服务', onClick: onToggle }]}
+              />
+            )}
             {mockLogs.map((log) => (
               <div key={log.id} className={`log-item ${log.matched ? '' : 'log-unmatched'}`}>
                 <span className="log-time">{log.time.substring(11, 19)}</span>

@@ -153,7 +153,13 @@ export default function CollectionTree(props) {
 
   return (
     <div className="collection-tree">
-      {collections.length === 0 && (
+      {/* 导入解析中：先给骨架，避免大集合阻塞主线程时被误认为卡死（也防止重复点导入） */}
+      {props.importing && (
+        <div className="pane-skeleton" aria-busy="true" aria-label="正在解析导入的集合">
+          <i /><i /><i /><i />
+        </div>
+      )}
+      {!props.importing && collections.length === 0 && (
         <div className="empty-guide">
           <div className="empty-guide-title">还没有集合</div>
           <div className="empty-guide-desc">集合用于归类保存请求，支持公共 Headers / 授权 / 批量运行</div>
@@ -162,8 +168,8 @@ export default function CollectionTree(props) {
           <button className="btn-block" title="支持 ReqMock / Reqable / Postman / Hoppscotch / OpenAPI / Insomnia / HAR" onClick={onImport}>导入…（也可直接拖文件到窗口）</button>
         </div>
       )}
-      {q && collections.length > 0 && shown.length === 0 && <div className="empty-hint">无匹配结果</div>}
-      {shown.map((col) => (
+      {!props.importing && q && collections.length > 0 && shown.length === 0 && <div className="empty-hint">无匹配结果</div>}
+      {!props.importing && shown.map((col) => (
         <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} forceOpenIds={forceOpenIds} onContextMenu={handleContextMenu} />
       ))}
 

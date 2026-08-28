@@ -45,7 +45,7 @@ export function explainRequestError(response) {
   if (code === 'ECONNREFUSED') {
     return {
       ...base,
-      title: `连接被拒绝${target ? `：${target} ` : ''}没有服务在监听`,
+      title: `连接被拒绝：${target ? `${target} ` : ''}没有服务在监听`,
       suggestions: [
         '确认目标服务已启动，且监听的端口与 URL 中的端口一致',
         '检查 URL 的主机名 / 端口是否填写正确',
@@ -186,4 +186,79 @@ export function explainRequestError(response) {
       '打开控制台查看完整请求日志'
     ]
   };
+}
+
+/** 从原始错误文本中提取 Node 错误码，如 `listen EADDRINUSE: address ...` → EADDRINUSE */
+function codeFromText(text) {
+  const m = /\b([A-Z][A-Z0-9_]{2,})(?::|\s)/.exec(text || '');
+  return m ? m[1] : '';
+}
+
+/** 从 `:::9000` / `0.0.0.0:9000` 这类片段里取端口号 */
+function portFromText(text) {
+  const m = /:?:(\d{2,5})\s*$/.exec((text || '').trim());
+  return m ? m[1] : '';
+}
+
+/**
+ * 非 HTTP 请求场景的错误解释：Mock 启停、导入 / 响应转 Mock 的解析失败、WS/SSE 连接失败。
+ * 识别不出具体原因时返回 null —— 调用方应保留原始报错文本，不要编造解释。
+ * @returns null | { title, suggestions: string[] }
+ */
+export function explainErrorText(text) {
+  const raw = String(text || '');
+  const upper = raw.toUpperCase();
+  const port = portFromText(raw);
+
+  if (upper.includes('EADDRINUSE')) {
+    return {
+      title: `端口已被占用${port ? `：${port}` : ''}`,
+      suggestions: [
+        '换一个端口再启动，或在「Mock 服务」面板修改端口',
+        '占用者常是上一次没退干净的本程序实例，结束残留进程后重试',
+        'Windows 上可用 netstat -ano | findstr ' + (port || ':端口号') + ' 找到占用进程 PID'
+      ]
+    };
+  }
+  if (upper.includes('EACCES') || upper.includes('PERMISSION DENIED')) {
+    return {
+      title: '端口无权限绑定',
+      suggestions: [
+        '1024 以下的端口需要管理员权限，改用 1024 以上的端口',
+        '该端口可能落在系统保留端口段，换一个端口'
+      ]
+    };
+  }
+  if (/JSON|UNEXPECTED TOKEN|UNEXPECTED END OF|IS NOT VALID|PARSE/i.test(upper)) {
+    return {
+      title: '内容不是合法 JSON，解析失败',
+      suggestions: [
+        '检查文件/报文开头的括号与逗号是否闭合',
+        '确认文件编码为 UTF-8（带 BOM 或 GBK 编码会导致解析失败）',
+        '导入时先确认选择的格式受支持：ReqMock / Postman / Hoppscotch / OpenAPI / Insomnia / HAR'
+      ]
+    };
+  }
+  // 连接类错误（WS/SSE 连不上、Mock 请求失败等）复用 HTTP 那张规则表
+  const code = codeFromText(raw);
+  if (code) {
+    const r = explainRequestError({ error: raw, errorCode: code });
+    if (r.title !== '请求发送失败') {
+      return { title: r.title, suggestions: r.suggestions };
+    }
+  }
+  return null;
+}
+
+/**
+ * 单行展示版（给 toast / 状态栏这类放不下一段话的位置）：
+ * 命中解释 → 「人话标题（原始报错截断）」；命中不了 → 原样返回，保证不比现状更差。
+ */
+export function describeError(raw, fallback = '未知错误') {
+  const text = String(raw || '').trim();
+  const e = explainErrorText(text);
+  if (!e) return text || fallback;
+  if (!text || e.title === text) return e.title;
+  const brief = text.length > 70 ? text.slice(0, 70) + '…' : text;
+  return `${e.title}（${brief}）`;
 }

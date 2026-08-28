@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { JbIcon } from './Icons.jsx';
 import { formatDate } from '../utils/toolboxUtil.js';
+import EmptyGuide from './EmptyGuide.jsx';
 
 /**
  * Cookie 管理面板：自动记录的 Cookie 按域名分组展示 + 全局开关 + 手动添加/删除/按域清空
@@ -66,11 +67,17 @@ export default function CookiePanel({ jar, cookiesEnabled, onChangeJar, onToggle
 
       <div className="cookie-body">
         {list.length === 0 && (
-          <div className="empty-hint">
-            {jar.length === 0
-              ? '暂无 Cookie。开启自动记录后，响应中的 Set-Cookie 会存入这里，并在后续同域请求中自动携带。'
-              : '无匹配的 Cookie'}
-          </div>
+          jar.length === 0 ? (
+            <EmptyGuide
+              title="还没有 Cookie"
+              desc={cookiesEnabled
+                ? '发送请求后，响应里的 Set-Cookie 会自动存到这里，并在后续同域请求中自动携带；也可以从浏览器导出后粘贴进来。'
+                : '自动记录当前是关闭的，响应里的 Set-Cookie 不会被保存。开启后即可在这里查看和管理各域名的 Cookie。'}
+              actions={cookiesEnabled ? [] : [{ label: '开启自动记录', onClick: onToggleEnabled }]}
+            />
+          ) : (
+            <div className="empty-hint">无匹配的 Cookie，清空上方搜索框可查看全部</div>
+          )
         )}
         {list.length > 0 && groups.map((g) => (
           <div key={g.domain} className="cookie-group">
