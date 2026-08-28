@@ -3319,6 +3319,42 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* 脚本子页签（前置/后置）：选中态用底色块区分（对标参考图 Pre Request / Post Response） */
+
+.script-subtabs { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+
+
+.script-subtab {
+
+
+
+  display: inline-flex; align-items: center; gap: 6px;
+
+
+
+  padding: 5px 14px; border-radius: var(--radius-s);
+
+
+
+  background: transparent; border: none; color: var(--text-dim); font-size: 13px; cursor: pointer;
+
+
+
+}
+
+
+
+.script-subtab:hover { color: var(--text); background: var(--bg-hover); }
+
+
+
+.script-subtab.active { color: var(--text); background: var(--bg-active); }
+
+.script-subtab .dot-indicator { position: static; }
+
+
+
 .script-editor-cols { display: flex; gap: 12px; flex: 1; min-height: 0; }
 
 
@@ -4827,7 +4863,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.script-code { flex: 1; min-height: 100px; display: flex; flex-direction: column; }
+.script-code { flex: 1; min-height: 160px; display: flex; flex-direction: column; }
 
 
 

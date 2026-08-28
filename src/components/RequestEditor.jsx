@@ -822,23 +822,31 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
         )}
         {tab === 'script' && (
           <div className="script-editor">
-            <div className="script-toolbar">
+            {/* 子页签切换前置/后置（对标 Postman 的 Pre Request / Post Response）：
+                一次只显示一个编辑器，编辑器高度吃满剩余空间 */}
+            <div className="script-subtabs">
+              <button
+                className={`script-subtab${activeScriptField === 'preScript' ? ' active' : ''}`}
+                onClick={() => setActiveScriptField('preScript')}
+                title="发送前执行，可修改 rm.request / 写环境变量"
+              >前置脚本{(request.preScript || '').trim() ? <span className="dot-indicator on" /> : null}</button>
+              <button
+                className={`script-subtab${activeScriptField === 'postScript' ? ' active' : ''}`}
+                onClick={() => setActiveScriptField('postScript')}
+                title="响应后执行，可断言测试 / 提取变量"
+              >后置脚本{(request.postScript || '').trim() ? <span className="dot-indicator on" /> : null}</button>
+              <span className="flex-spacer" />
               <ScriptSnippetPopover onInsert={(code) => {
                 const field = activeScriptField;
                 const prev = request[field] || '';
                 const newVal = prev ? prev + '\n' + code : code;
                 set(field, newVal);
               }} />
-              <span className="script-toolbar-hint">当前插入目标：{activeScriptField === 'preScript' ? '前置脚本' : '后置脚本'}</span>
+              <button className="btn-text script-ext-btn" title="写入临时文件并用 VSCode 打开，保存后自动同步回此处" onClick={() => openExternal(activeScriptField)}>
+                {Object.values(extEditing).includes(activeScriptField) ? <><span className="dot-indicator on" /> 外部编辑中</> : 'VSCode 编辑'}
+              </button>
             </div>
-            <div className="script-editor-cols">
-            <div className="script-col">
-              <div className="script-title">
-                前置脚本（发送前执行，可修改 rm.request / 写环境变量）
-                <button className="btn-text script-ext-btn" title="写入临时文件并用 VSCode 打开，保存后自动同步回此处" onClick={() => openExternal('preScript')}>
-                  {Object.values(extEditing).includes('preScript') ? <><span className="dot-indicator on" /> 外部编辑中</> : 'VSCode 编辑'}
-                </button>
-              </div>
+            {activeScriptField === 'preScript' ? (
               <CodeEditor
                 className="script-code"
                 language="javascript"
@@ -851,14 +859,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
                 onChange={(v) => set('preScript', v)}
                 onFocus={() => setActiveScriptField('preScript')}
               />
-            </div>
-            <div className="script-col">
-              <div className="script-title">
-                后置脚本（响应后执行，可断言测试 / 提取变量）
-                <button className="btn-text script-ext-btn" title="写入临时文件并用 VSCode 打开，保存后自动同步回此处" onClick={() => openExternal('postScript')}>
-                  {Object.values(extEditing).includes('postScript') ? <><span className="dot-indicator on" /> 外部编辑中</> : 'VSCode 编辑'}
-                </button>
-              </div>
+            ) : (
               <CodeEditor
                 className="script-code"
                 language="javascript"
@@ -871,8 +872,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
                 onChange={(v) => set('postScript', v)}
                 onFocus={() => setActiveScriptField('postScript')}
               />
-            </div>
-            </div>
+            )}
           </div>
         )}
         {tab === 'settings' && (
