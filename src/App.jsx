@@ -78,6 +78,8 @@ import { upsertCookies, pruneCookies } from './utils/cookieUtil.js';
 
 import { normalizeSettings, applyTheme, watchSystemTheme } from './utils/themeUtil.js';
 
+import { initA11yClicks } from './utils/a11yClicks.js';
+
 import { exportPostmanCollection, exportMarkdownDocs } from './utils/exportUtil.js';
 
 import { buildSampleWorkspace } from './utils/sampleData.js';
@@ -926,6 +928,12 @@ export default function App() {
     animatePage(pageScope.current, { opacity: [0.72, 1] }, { duration: 0.12, ease: 'easeOut' });
 
   }, [curTab.id]);
+
+
+
+  // 键盘可达性垫片：让 div/span + onClick 实现的控件可 Tab 聚焦、可用 Enter/Space 激活
+
+  useEffect(() => initA11yClicks(), []);
 
 
 
