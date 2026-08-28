@@ -2151,7 +2151,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 选择器需带 .editor-tabs 前缀，否则被 .editor-tabs button 的 padding 覆盖（特异性更高） */
+/* 「更多页签」入口：⋮ 图标 + 左分隔线，视觉上是行尾一个独立控件（10px 小三角曾被反馈太不显眼） */
 
 .editor-tabs .editor-tabs-more {
 
@@ -2161,11 +2161,19 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  min-width: 28px; padding: 0 6px; border: none; border-bottom: 1px solid transparent;
+  min-width: 34px; padding: 0 8px; border: none; border-bottom: 1px solid transparent;
 
 
 
-  border-radius: 0; background: transparent !important; color: var(--text-dim); cursor: pointer;
+  border-left: 1px solid var(--border); border-radius: 0;
+
+
+
+  background: transparent !important; color: var(--text-dim); cursor: pointer;
+
+
+
+  font-size: 16px; /* ⋮ 点阵在 14px 下偏小，字号放大让图标视觉重量与页签文字平衡 */
 
 
 

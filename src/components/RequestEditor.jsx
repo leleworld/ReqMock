@@ -595,7 +595,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
               const rect = e.currentTarget.getBoundingClientRect();
               setTabsMenu(tabsMenu ? null : { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180) });
             }}
-          ><JbIcon name="caret-down" size={10} /></button>
+          ><JbIcon name="more-options" size={14} /></button>
           {tabsMenu && (
             <div className="ctx-menu hp-menu editor-tabs-menu" style={{ top: tabsMenu.top, left: tabsMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
               {tabDefs.map(([key, label, count, , hasCount]) => (
