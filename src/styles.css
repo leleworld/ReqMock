@@ -2029,7 +2029,13 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.editor-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.editor-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+
+
+
+/* 页签行空间不足时横向滚动，而不是把中文标签挤成两行（按钮禁压缩 + nowrap） */
+
+.editor-tabs button { white-space: nowrap; flex-shrink: 0; }
 
 
 
@@ -2041,8 +2047,8 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  /* 右侧 24px 为计数徽标/状态点预留槽位：数据变化不再改变按钮宽度，后面的页签就不会左右滑 */
-  padding: 8px 24px 8px 14px; background: none; color: var(--text-dim);
+  /* 右侧 20px 为计数徽标/状态点预留槽位：数据变化不再改变按钮宽度，后面的页签就不会左右滑 */
+  padding: 8px 20px 8px 14px; background: none; color: var(--text-dim);
 
 
 
@@ -2066,7 +2072,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  position: absolute; right: 7px; top: 7px;
+  position: absolute; right: 5px; top: 7px;
 
 
 
@@ -2092,7 +2098,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  position: absolute; right: 12px; top: 12px;
+  position: absolute; right: 9px; top: 12px;
 
 
 
