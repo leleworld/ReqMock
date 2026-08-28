@@ -2129,7 +2129,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 「更多页签」入口：粘在页签行右缘，行内横向滚动时不被带走 */
+/* 「更多页签」入口：紧跟最后一个页签（margin-left:auto 会把它推到行尾，中间隔出大段空白像悬浮孤块） */
 
 .editor-tabs-more-wrap {
 
@@ -2139,7 +2139,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  flex-shrink: 0; margin-left: auto;
+  flex-shrink: 0;
 
 
 
@@ -2161,11 +2161,11 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  min-width: 28px; padding: 0 6px; border: none; border-bottom: 2px solid transparent;
+  min-width: 28px; padding: 0 6px; border: none; border-bottom: 1px solid transparent;
 
 
 
-  border-radius: 0; background: var(--bg-panel); color: var(--text-dim); cursor: pointer;
+  border-radius: 0; background: transparent !important; color: var(--text-dim); cursor: pointer;
 
 
 
@@ -2173,7 +2173,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.editor-tabs .editor-tabs-more:hover, .editor-tabs .editor-tabs-more.on { color: var(--text); background: var(--bg-hover); }
+.editor-tabs .editor-tabs-more:hover, .editor-tabs .editor-tabs-more.on { color: var(--text); background: var(--bg-hover) !important; }
 
 
 
@@ -2192,8 +2192,10 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
   /* 计数已改为内联固定宽度占位（.tab-count），此处不再额外留槽；
-     状态点绝对定位落在 14px 内边距里，不占文字宽度 */
-  padding: 8px 14px; background: none; color: var(--text-dim);
+     状态点绝对定位落在 14px 内边距里，不占文字宽度。
+     注意 .editor-tabs-more 的背景需带 !important：本规则与它同为一条选择器链上的
+     button 规则，靠后者覆盖（background:none）会让「透明」声明被吃掉 */
+  padding: 8px 14px; background: none !important; color: var(--text-dim);
 
 
 
