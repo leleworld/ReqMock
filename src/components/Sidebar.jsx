@@ -299,22 +299,6 @@ export default function Sidebar(props) {
       )}
       </AnimatePresence>
 
-      {/* Mini 模式：面板收起时显示紧凑图标栏 */}
-      {!panelOpen && (
-        <div className="sidebar-mini">
-          {ACTIVITIES.map((a) => (
-            <button
-              key={a.key}
-              className={`sidebar-mini-btn ${activity === a.key ? 'active' : ''}`}
-              title={a.label}
-              onClick={() => { onActivity(a.key); if (onTogglePanel) onTogglePanel(); }}
-            >
-              <JbIcon name={a.icon} size={17} />
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* 侧栏宽度拖拽手柄：悬停/拖拽时高亮为强调色 */}
       {panelOpen && (
         <div
