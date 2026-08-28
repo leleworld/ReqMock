@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 import KeyValueEditor from './KeyValueEditor.jsx';
@@ -20,6 +20,8 @@ import { ParamPresetsModal } from './Modals.jsx';
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
 const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
+/** 页签行常驻显示的高频三项；其余收进右侧「更多页签」下拉，宽度不足时连常驻项也只留当前页签 */
+const PINNED_TABS = ['params', 'body', 'headers'];
 
 /**
  * 脚本片段插入浮层：按分类展示模板，选中后插入代码到目标字段
@@ -319,6 +321,53 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     if (m === 'GET') setTab('params');
     else if (m === 'POST') setTab('body');
   }, [request]);
+  // ---- 页签行自适应：常驻三项 + 当前页签；宽度不足则塌缩为只显示当前页签（对标 Postman）----
+  const tabsRowRef = useRef(null);
+  const [tabsCompact, setTabsCompact] = useState(false);
+  const [tabsMenu, setTabsMenu] = useState(null); // 「更多页签」下拉：{ top, left } | null
+  const tabsNeedRef = useRef(0); // 记录非塌缩态所需宽度，作为恢复阈值，避免两档来回抖动
+  const [tabsRowW, setTabsRowW] = useState(0);
+
+  useEffect(() => {
+    const el = tabsRowRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setTabsRowW(el.clientWidth));
+    ro.observe(el);
+    setTabsRowW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = tabsRowRef.current;
+    if (!el) return;
+    if (!tabsCompact) {
+      if (el.scrollWidth > el.clientWidth + 8) {
+        tabsNeedRef.current = el.scrollWidth;
+        setTabsCompact(true);
+      } else {
+        tabsNeedRef.current = 0;
+      }
+    } else if (tabsNeedRef.current && el.clientWidth >= tabsNeedRef.current - 8) {
+      setTabsCompact(false);
+    }
+  }, [tab, request.id, tabsCompact, tabsRowW]);
+
+  // 点击面板外或按 Esc 关闭「更多页签」下拉
+  useEffect(() => {
+    if (!tabsMenu) return undefined;
+    const onDown = (e) => {
+      if (e.target instanceof Element && e.target.closest('.editor-tabs-more-wrap')) return;
+      setTabsMenu(null);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setTabsMenu(null); };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [tabsMenu]);
+
   const [fmtError, setFmtError] = useState('');
   const [docPreview, setDocPreview] = useState(false); // 文档页 Markdown 预览开关
   // Headers 预设：下拉菜单定位 + 管理弹窗开关
@@ -533,29 +582,59 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     </>
   );
 
+  // ---- 页签可见性策略（对标 Postman）----
+  // 常驻高频三项，其余收进右侧向下三角；容器再窄就塌缩成「只显示当前页签」
+  const tabDefs = [
+    ['params', 'Params', request.params.filter((p) => p.key).length, false, true],
+    ['body', 'Body', 0, request.bodyType !== 'none', false],
+    ['headers', 'Headers', request.headers.filter((h) => h.key).length, false, true],
+    ['auth', '授权', 0, auth.type !== 'none', false],
+    ['script', '脚本', 0, !!(request.preScript || request.postScript), false],
+    ['settings', '设置', 0, settingsCount > 0, false],
+    ['doc', '文档', 0, !!request.doc, false],
+    ['examples', '示例', (request.examples || []).length, false, true]
+  ];
+  const activeDef = tabDefs.find((d) => d[0] === tab) || tabDefs[0];
+  const pinnedDefs = tabDefs.filter((d) => PINNED_TABS.includes(d[0]));
+  const shownDefs = tabsCompact
+    ? [activeDef]
+    : (PINNED_TABS.includes(tab) ? pinnedDefs : [...pinnedDefs, activeDef]);
+
+  const renderTabBtn = ([key, label, count, hasDot, hasCount]) => (
+    <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
+      {label}
+      {hasCount && <span className={`tab-count${count ? '' : ' is-empty'}`}>({count})</span>}
+      {hasDot && <span className="dot-indicator" />}
+      {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+    </button>
+  );
+
   return (
     <div className="request-editor">
-      <div className="editor-tabs">
-        {[
-          /* [页签 key, 文案, 计数, 状态点, 是否带计数位]
-              计数用内联括号（与 Postman/Apifox 一致），但靠 .tab-count 固定宽度 + 等宽数字
-              保证「有无计数、几位数」都不改变按钮宽度；只有会带计数的页签才占这份宽度 */
-          ['params', 'Params', request.params.filter((p) => p.key).length, false, true],
-          ['body', 'Body', 0, request.bodyType !== 'none', false],
-          ['headers', 'Headers', request.headers.filter((h) => h.key).length, false, true],
-          ['auth', '授权', 0, auth.type !== 'none', false],
-          ['script', '脚本', 0, !!(request.preScript || request.postScript), false],
-          ['settings', '设置', 0, settingsCount > 0, false],
-          ['doc', '文档', 0, !!request.doc, false],
-          ['examples', '示例', (request.examples || []).length, false, true]
-        ].map(([key, label, count, hasDot, hasCount]) => (
-          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
-            {label}
-            {hasCount && <span className={`tab-count${count ? '' : ' is-empty'}`}>({count})</span>}
-            {hasDot && <span className="dot-indicator" />}
-            {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
-          </button>
-        ))}
+      <div className="editor-tabs" ref={tabsRowRef}>
+        {shownDefs.map(renderTabBtn)}
+        <span className="editor-tabs-more-wrap">
+          <button
+            className={`editor-tabs-more${tabsMenu ? ' on' : ''}`}
+            title="选择要显示的页签"
+            aria-label="更多页签"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setTabsMenu(tabsMenu ? null : { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180) });
+            }}
+          ><JbIcon name="caret-down" size={10} /></button>
+          {tabsMenu && (
+            <div className="ctx-menu hp-menu editor-tabs-menu" style={{ top: tabsMenu.top, left: tabsMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
+              {tabDefs.map(([key, label, count, , hasCount]) => (
+                <div key={key} className="ctx-item" onClick={() => { setTab(key); setTabsMenu(null); }}>
+                  <span className="ctx-check">{tab === key ? <JbIcon name="checkmark" size={12} /> : ''}</span>
+                  <span className="ctx-label">{label}</span>
+                  {hasCount && count > 0 && <span className="ctx-kbd">{count}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </span>
       </div>
 
       <div className="editor-content">

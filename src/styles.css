@@ -2129,6 +2129,54 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* 「更多页签」入口：粘在页签行右缘，行内横向滚动时不被带走 */
+
+.editor-tabs-more-wrap {
+
+
+
+  position: sticky; right: 0; z-index: 2;
+
+
+
+  flex-shrink: 0; margin-left: auto;
+
+
+
+  display: inline-flex; align-self: stretch;
+
+
+
+}
+
+
+
+/* 选择器需带 .editor-tabs 前缀，否则被 .editor-tabs button 的 padding 覆盖（特异性更高） */
+
+.editor-tabs .editor-tabs-more {
+
+
+
+  display: inline-flex; align-items: center; justify-content: center;
+
+
+
+  min-width: 28px; padding: 0 6px; border: none; border-bottom: 2px solid transparent;
+
+
+
+  border-radius: 0; background: var(--bg-panel); color: var(--text-dim); cursor: pointer;
+
+
+
+}
+
+
+
+.editor-tabs .editor-tabs-more:hover, .editor-tabs .editor-tabs-more.on { color: var(--text); background: var(--bg-hover); }
+
+
+
 /* 页签行空间不足时横向滚动，而不是把中文标签挤成两行（按钮禁压缩 + nowrap） */
 
 .editor-tabs button { white-space: nowrap; flex-shrink: 0; }
