@@ -76,7 +76,7 @@ import { toCurl, parseCurl } from './utils/curlUtil.js';
 
 import { upsertCookies, pruneCookies } from './utils/cookieUtil.js';
 
-import { normalizeSettings, applyTheme } from './utils/themeUtil.js';
+import { normalizeSettings, applyTheme, watchSystemTheme } from './utils/themeUtil.js';
 
 import { exportPostmanCollection, exportMarkdownDocs } from './utils/exportUtil.js';
 
@@ -701,6 +701,18 @@ export default function App() {
     setNoticeUnread((n) => n + 1);
 
   }, []);
+
+
+
+  // 「跟随系统」：系统明暗切换时实时重涂，无需重启或重开设置面板
+
+  useEffect(() => {
+
+    if (settings.theme !== 'system') return undefined;
+
+    return watchSystemTheme(() => applyTheme(settings));
+
+  }, [settings.theme, settings.accent]);
 
 
 

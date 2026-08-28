@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 import { maskFade, modalPop } from '../utils/motionPresets.js';
-import { THEMES, ACCENTS, LAYOUTS } from '../utils/themeUtil.js';
+import { THEMES, ACCENTS, LAYOUTS, resolveTheme } from '../utils/themeUtil.js';
 
 /**
  * 全页设置面板 — Hoppscotch 风格
@@ -29,7 +29,10 @@ export default function SettingsPage({ settings, onChange, onBackup, onRestore, 
               <div className="sp-item">
                 <div className="sp-item-header">
                   <span className="sp-item-title">外观</span>
-                  <span className="sp-item-hint">{THEMES.find(t => t.value === settings.theme)?.label || '暗色'}</span>
+                  <span className="sp-item-hint">
+                    {THEMES.find((t) => t.value === settings.theme)?.label || '暗色'}
+                    {settings.theme === 'system' ? ` · ${resolveTheme('system') === 'dark' ? 'Dark' : 'Light'}` : ''}
+                  </span>
                 </div>
                 <div className="sp-theme-picker">
                   {THEMES.map((t) => (
@@ -37,9 +40,9 @@ export default function SettingsPage({ settings, onChange, onBackup, onRestore, 
                       key={t.value}
                       className={`sp-theme-btn ${settings.theme === t.value ? 'active' : ''}`}
                       onClick={() => onChange({ theme: t.value })}
-                      title={t.label}
+                      title={t.dark === null ? '跟随系统：随操作系统明暗自动切换' : t.label}
                     >
-                      {t.dark ? '☾' : '☀'}
+                      {t.dark === null ? '◐' : t.dark ? '☾' : '☀'}
                       <span>{t.label}</span>
                     </button>
                   ))}

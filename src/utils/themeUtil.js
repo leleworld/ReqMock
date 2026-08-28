@@ -5,8 +5,10 @@
 import { normalizePresets } from './headerPresets.js';
 import { normalizeParamPresets } from './paramPresets.js';
 
-/* IDEA 预置主题：Islands 系列 + 经典系列，dark 标记用于明暗图标 */
+/* IDEA 预置主题：Islands 系列 + 经典系列，dark 标记用于明暗图标；
+   system 不绑定具体配色，由系统偏好解析成 dark / light（见 resolveTheme） */
 export const THEMES = [
+  { value: 'system', label: '跟随系统', dark: null },
   { value: 'islands-dark', label: 'Islands Dark', dark: true },
   { value: 'islands-light', label: 'Islands Light', dark: false },
   { value: 'islands-darcula', label: 'Islands Darcula', dark: true },
@@ -16,6 +18,30 @@ export const THEMES = [
   { value: 'light-header', label: 'Light with Light Header', dark: false },
   { value: 'darcula', label: 'Darcula', dark: true }
 ];
+
+/** 系统是否偏好深色；环境不支持 matchMedia 时按深色处理（本产品的默认观感） */
+export function systemPrefersDark() {
+  if (typeof window === 'undefined' || !window.matchMedia) return true;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** 把设置里的主题值解析成实际生效的 data-theme（system → dark / light） */
+export function resolveTheme(theme) {
+  return theme === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : theme;
+}
+
+/** 订阅系统明暗变化；返回取消订阅函数。仅在「跟随系统」下需要 */
+export function watchSystemTheme(onChange) {
+  if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const handler = () => onChange();
+  if (mq.addEventListener) mq.addEventListener('change', handler);
+  else mq.addListener(handler); // Safari < 14 兜底
+  return () => {
+    if (mq.removeEventListener) mq.removeEventListener('change', handler);
+    else mq.removeListener(handler);
+  };
+}
 
 export const ACCENTS = [
   { value: 'blue', label: '蓝', color: '#4a8cf7' },
@@ -72,12 +98,12 @@ export function normalizeSettings(s) {
   };
 }
 
-/** 把主题设置应用到文档根元素 */
+/** 把主题设置应用到文档根元素（theme=system 时按系统偏好解析为 dark / light） */
 export function applyTheme(settings) {
   const { theme, accent } = normalizeSettings(settings);
   // 临时启用过渡动画，主题切换完成后移除
   document.documentElement.classList.add('theme-transitioning');
-  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.theme = resolveTheme(theme);
   document.documentElement.dataset.accent = accent;
   setTimeout(() => {
     document.documentElement.classList.remove('theme-transitioning');
