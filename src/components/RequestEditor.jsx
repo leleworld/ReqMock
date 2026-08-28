@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 import KeyValueEditor from './KeyValueEditor.jsx';
@@ -321,36 +321,10 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     if (m === 'GET') setTab('params');
     else if (m === 'POST') setTab('body');
   }, [request]);
-  // ---- 页签行自适应：常驻三项 + 当前页签；宽度不足则塌缩为只显示当前页签（对标 Postman）----
-  const tabsRowRef = useRef(null);
-  const [tabsCompact, setTabsCompact] = useState(false);
-  const [tabsMenu, setTabsMenu] = useState(null); // 「更多页签」下拉：{ top, left } | null
-  const tabsNeedRef = useRef(0); // 记录非塌缩态所需宽度，作为恢复阈值，避免两档来回抖动
-  const [tabsRowW, setTabsRowW] = useState(0);
-
-  useEffect(() => {
-    const el = tabsRowRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => setTabsRowW(el.clientWidth));
-    ro.observe(el);
-    setTabsRowW(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
-
-  useLayoutEffect(() => {
-    const el = tabsRowRef.current;
-    if (!el) return;
-    if (!tabsCompact) {
-      if (el.scrollWidth > el.clientWidth + 8) {
-        tabsNeedRef.current = el.scrollWidth;
-        setTabsCompact(true);
-      } else {
-        tabsNeedRef.current = 0;
-      }
-    } else if (tabsNeedRef.current && el.clientWidth >= tabsNeedRef.current - 8) {
-      setTabsCompact(false);
-    }
-  }, [tab, request.id, tabsCompact, tabsRowW]);
+  // ---- 页签可见性：常驻 Params/Body/Headers + 当前页签；其余收进「更多页签」下拉 ----
+  // 不做窄宽度塌缩：窄容器由 .editor-tabs 既有的横向滚动兜底，三项始终可见可点
+  // 「更多页签」下拉：{ top, left } | null
+  const [tabsMenu, setTabsMenu] = useState(null);
 
   // 点击面板外或按 Esc 关闭「更多页签」下拉
   useEffect(() => {
@@ -596,9 +570,8 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   ];
   const activeDef = tabDefs.find((d) => d[0] === tab) || tabDefs[0];
   const pinnedDefs = tabDefs.filter((d) => PINNED_TABS.includes(d[0]));
-  const shownDefs = tabsCompact
-    ? [activeDef]
-    : (PINNED_TABS.includes(tab) ? pinnedDefs : [...pinnedDefs, activeDef]);
+  // 常驻三项恒显示；当前页签不在三项之中时内联追加显示（切换目标一眼可见）
+  const shownDefs = PINNED_TABS.includes(tab) ? pinnedDefs : [...pinnedDefs, activeDef];
 
   const renderTabBtn = ([key, label, count, hasDot, hasCount]) => (
     <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
@@ -611,7 +584,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
 
   return (
     <div className="request-editor">
-      <div className="editor-tabs" ref={tabsRowRef}>
+      <div className="editor-tabs">
         {shownDefs.map(renderTabBtn)}
         <span className="editor-tabs-more-wrap">
           <button
