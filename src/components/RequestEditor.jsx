@@ -537,20 +537,21 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     <div className="request-editor">
       <div className="editor-tabs">
         {[
-          /* [页签 key, 文案, 计数, 状态点]：计数与状态点一律绝对定位（脱流），按钮宽度只跟文案走，
-              切换不同请求时后面的页签不会因 " (3)" 出现/消失而整体横移 */
-          ['params', 'Params', request.params.filter((p) => p.key).length, false],
-          ['body', 'Body', 0, request.bodyType !== 'none'],
-          ['headers', 'Headers', request.headers.filter((h) => h.key).length, false],
-          ['auth', '授权', 0, auth.type !== 'none'],
-          ['script', '脚本', 0, !!(request.preScript || request.postScript)],
-          ['settings', '设置', 0, settingsCount > 0],
-          ['doc', '文档', 0, !!request.doc],
-          ['examples', '示例', (request.examples || []).length, false]
-        ].map(([key, label, count, hasDot]) => (
+          /* [页签 key, 文案, 计数, 状态点, 是否带计数位]
+              计数用内联括号（与 Postman/Apifox 一致），但靠 .tab-count 固定宽度 + 等宽数字
+              保证「有无计数、几位数」都不改变按钮宽度；只有会带计数的页签才占这份宽度 */
+          ['params', 'Params', request.params.filter((p) => p.key).length, false, true],
+          ['body', 'Body', 0, request.bodyType !== 'none', false],
+          ['headers', 'Headers', request.headers.filter((h) => h.key).length, false, true],
+          ['auth', '授权', 0, auth.type !== 'none', false],
+          ['script', '脚本', 0, !!(request.preScript || request.postScript), false],
+          ['settings', '设置', 0, settingsCount > 0, false],
+          ['doc', '文档', 0, !!request.doc, false],
+          ['examples', '示例', (request.examples || []).length, false, true]
+        ].map(([key, label, count, hasDot, hasCount]) => (
           <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
             {label}
-            <span className="tab-badge">{count > 0 ? count : ''}</span>
+            {hasCount && <span className={`tab-count${count ? '' : ' is-empty'}`}>({count})</span>}
             {hasDot && <span className="dot-indicator" />}
             {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
           </button>

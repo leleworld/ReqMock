@@ -2135,8 +2135,9 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  /* 右侧 20px 为计数徽标/状态点预留槽位：数据变化不再改变按钮宽度，后面的页签就不会左右滑 */
-  padding: 8px 20px 8px 14px; background: none; color: var(--text-dim);
+  /* 计数已改为内联固定宽度占位（.tab-count），此处不再额外留槽；
+     状态点绝对定位落在 14px 内边距里，不占文字宽度 */
+  padding: 8px 14px; background: none; color: var(--text-dim);
 
 
 
@@ -2152,27 +2153,23 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 页签计数徽标：绝对定位于按钮右侧预留槽，不参与行内布局；
+/* 页签计数：内联括号（与 Postman/Apifox 视觉一致），但固定宽度 + 等宽数字，
 
-   tabular-nums 让数字等宽，1→10→100 变化时徽标本身也不抖 */
+   让「有无计数、1 位还是 3 位」都不改变按钮宽度 */
 
-.tab-badge {
-
-
-
-  position: absolute; right: 5px; top: 7px;
+.tab-count {
 
 
 
-  min-width: 10px; text-align: center; white-space: nowrap;
+  display: inline-block; min-width: 2.9em; margin-left: 2px; text-align: left;
 
 
 
-  font-size: 10px; line-height: 12px; font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
 
 
 
-  color: var(--text-dim); opacity: 0.85;
+  color: var(--text-dim); opacity: 0.72;
 
 
 
@@ -2180,13 +2177,19 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 页签内的状态点同样脱流（请求区/响应区/集合设置弹窗共用） */
+/* 计数为 0 时保留占位、不显示刺眼的 (0) */
+
+.tab-count.is-empty { visibility: hidden; }
+
+
+
+/* 页签内的状态点脱流，落在按钮 14px 内边距里（请求区/响应区/集合设置弹窗共用） */
 
 .editor-tabs .dot-indicator {
 
 
 
-  position: absolute; right: 9px; top: 12px;
+  position: absolute; right: 4px; top: 12px;
 
 
 

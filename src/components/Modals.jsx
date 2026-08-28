@@ -124,7 +124,7 @@ export function CollectionSettingsModal({ collection, onConfirm, onClose }) {
         <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>常规</button>
         <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
           公共 Headers
-          <span className="tab-badge">{headers.filter((h) => h.key).length || ''}</span>
+          {(() => { const n = headers.filter((h) => h.key).length; return <span className={`tab-count${n ? '' : ' is-empty'}`}>({n})</span>; })()}
         </button>
         <button className={tab === 'auth' ? 'active' : ''} onClick={() => setTab('auth')}>
           授权{auth.type !== 'none' && <span className="dot-indicator" />}
