@@ -159,6 +159,32 @@
 
 
 
+  /* ==== 历史别名：部分样式按另一套 token 名书写（--bg-primary 等），:root 从未定义，
+
+     于是永远走 fallback 里的硬编码深色 → 浅色主题成片失效。此处统一映射到主题真实 token。
+
+     自定义属性在「声明所在元素」上按计算值展开，而 :root 与 :root[data-theme=xxx] 命中的
+
+     是同一个 documentElement，所以只需映射一次，8 个主题全部自动生效。
+
+     取值刻意贴近各处原 fallback，深色主题观感保持不变。 ==== */
+
+  --bg-primary: var(--bg);
+
+  --bg-secondary: var(--bg-panel);
+
+  --bg-tertiary: var(--bg-active);
+
+  --bg-sidebar: var(--bg);
+
+  --bg-input: var(--bg-hover);
+
+  --accent-bg: color-mix(in srgb, var(--accent) 15%, transparent);
+
+  --radius-l: 10px;
+
+
+
 }
 
 
