@@ -2117,7 +2117,15 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.editor-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.editor-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+
+
+
+/* 窄容器下页签行改为横向滚动，但不显示滚动条：
+
+   8px 滚动条会从行内取走高度，导致页签文字顶部被裁切；滚轮/触控板仍可横向滑动 */
+
+.editor-tabs::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 
 
@@ -2161,11 +2169,11 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  display: inline-block; min-width: 2.9em; margin-left: 2px; text-align: left;
+  display: inline-block; min-width: 2.6em; margin-left: 2px; text-align: left;
 
 
 
-  font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap;
 
 
 
@@ -2257,7 +2265,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.kv-key { width: 220px; padding: 6px 8px; }
+.kv-key { flex: 0 1 34%; min-width: 110px; max-width: 220px; padding: 6px 8px; }
 
 
 
