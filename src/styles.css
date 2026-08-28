@@ -3903,6 +3903,24 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* ==== P1 可达性：过小命中区补到 ≥24×24（WCAG 2.2 Target Size），视觉尺寸不变 ==== */
+
+.tab-close, .panel-collapse, .item-delete {
+
+
+
+  min-width: 24px; min-height: 24px;
+
+
+
+  display: inline-flex; align-items: center; justify-content: center;
+
+
+
+}
+
+
+
 .tab-add {
 
 

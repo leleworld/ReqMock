@@ -231,6 +231,7 @@ const SHORTCUTS = [
   ['格式化代码', 'Ctrl+Alt+L'],
 
   ['快捷键速查', 'F1'],
+  ['切换导航面板', 'F2–F7'],
 
   ['跳转到行', 'Ctrl+G'],
 
@@ -2181,6 +2182,22 @@ export default function App() {
       // F1: 快捷键速查
 
       else if (!ctrl && !shift && !alt && k === 'F1') { e.preventDefault(); setKbdOpen((v) => !v); }
+
+      // F2–F7: 直达各导航面板（对标 Reqable）。
+
+      // 这里刻意不调 handleActivity：它在本 effect 的闭包里读到的 activity 是注册时的旧值，
+
+      // 会把「切回当前面板」误判成「再按一次收起」。setter 本身稳定，不受闭包过期影响。
+
+      else if (!ctrl && !shift && !alt && /^F([2-7])$/.test(k)) {
+
+        const panelByFn = { F2: 'collections', F3: 'env', F4: 'mocks', F5: 'cookies', F6: 'history', F7: 'tools' };
+
+        const target = panelByFn[k];
+
+        if (target) { e.preventDefault(); setActivity(target); setPanelOpen(true); }
+
+      }
 
       // Ctrl+Shift+N: 新建窗口
 
