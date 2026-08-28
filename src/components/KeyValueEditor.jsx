@@ -204,6 +204,7 @@ export default function KeyValueEditor({
                 className="kv-key"
                 placeholder={keyPlaceholder}
                 value={row.key}
+                title={row.key || undefined}
                 list={keySuggestions.length > 0 ? listId : undefined}
                 onChange={(e) => update(i, 'key', e.target.value)}
               />
@@ -212,6 +213,7 @@ export default function KeyValueEditor({
                   className="kv-value"
                   placeholder={valuePlaceholder}
                   value={row.value}
+                  title={(row.value || '').length > 40 ? row.value : undefined}
                   varNames={varNames}
                   varMap={varMap}
                   highlight="vars"

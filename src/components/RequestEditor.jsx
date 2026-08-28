@@ -93,6 +93,8 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [sugIndex, setSugIndex] = useState(-1);
+  // 完整 URL 展开面板：长 URL 在单行输入框里被裁尾，Alt+Enter 或点「全文」展开多行查看
+  const [urlExpanded, setUrlExpanded] = useState(false);
   const sugTimeoutRef = useRef(null);
 
   const filterSuggestions = (input) => {
@@ -131,6 +133,12 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
   };
 
   const handleKeyDown = (e) => {
+    // Alt+Enter：展开/收起完整 URL（优先于补全导航处理）
+    if (e.key === 'Enter' && e.altKey) {
+      e.preventDefault();
+      setUrlExpanded((v) => !v);
+      return;
+    }
     // URL suggestions 键盘导航
     if (showSuggestions && suggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -185,7 +193,16 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
   // 激活环境设了颜色时，请求栏左侧展示环境警示色条，避免发错环境
   const envColor = activeEnv && activeEnv.color ? activeEnv.color : null;
 
+  // 完整 URL 展开面板数据：按 ? 与 & 断行，长 URL 一眼看全并可整段复制
+  const rawUrl = request.url || '';
+  const urlQIdx = rawUrl.indexOf('?');
+  const urlBase = urlQIdx >= 0 ? rawUrl.slice(0, urlQIdx) : rawUrl;
+  const urlPairs = urlQIdx >= 0 ? rawUrl.slice(urlQIdx + 1).split('&').filter(Boolean) : [];
+  // 仅当 URL 长到单行大概率看不全时才占位，短 URL 不加噪声、不挤输入框
+  const showUrlToggle = rawUrl.length > 80;
+
   return (
+    <>
     <div
       className={`request-bar${envColor ? ' env-tinted' : ''}`}
       style={envColor ? { '--env-accent': envColor } : undefined}
@@ -216,6 +233,7 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
           className="url-input"
           placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
           value={request.url}
+          title={request.url || undefined}
           varNames={varNames}
           varMap={varMap}
           highlight
@@ -240,6 +258,13 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
           </div>
         )}
       </div>
+      {showUrlToggle && (
+        <button
+          className="url-full-btn"
+          title={urlExpanded ? '收起完整 URL (Alt+Enter)' : '展开查看完整 URL (Alt+Enter)'}
+          onClick={() => setUrlExpanded((v) => !v)}
+        >{urlExpanded ? '收起' : '全文'}</button>
+      )}
       {sending ? (
         <button className="btn-primary btn-sending" title="请求发送中，点击取消" onClick={onCancel}>
           <span className="btn-ring" aria-hidden="true" />发送中
@@ -248,6 +273,24 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
         <button className="btn-primary" onClick={onSend}>发送</button>
       )}
     </div>
+    {urlExpanded && (
+      <div className="url-expanded">
+        <div className="url-expanded-head">
+          <span>完整 URL · {rawUrl.length} 字符 · {urlPairs.length} 个查询参数</span>
+          <span className="flex-spacer" />
+          <button
+            className="btn-text"
+            onClick={() => {
+              if (navigator.clipboard) navigator.clipboard.writeText(rawUrl);
+              if (onToast) onToast('已复制完整 URL', 'success');
+            }}
+          >复制</button>
+          <button className="btn-text" onClick={() => setUrlExpanded(false)}>收起</button>
+        </div>
+        <pre className="url-expanded-body">{urlBase}{urlPairs.map((p, i) => `\n  ${i === 0 ? '?' : '&'} ${p}`)}</pre>
+      </div>
+    )}
+    </>
   );
 }
 

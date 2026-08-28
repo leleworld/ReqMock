@@ -1935,6 +1935,68 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* ==== 完整 URL 展开：长 URL 在单行输入框里看不全的兜底（入口按钮 + 多行面板） ==== */
+
+.url-full-btn {
+
+
+
+  flex-shrink: 0; align-self: center; height: 32px; padding: 0 10px;
+
+
+
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+
+
+
+  background: var(--bg-panel); color: var(--text-dim); font-size: 12px; cursor: pointer;
+
+
+
+}
+
+
+
+.url-full-btn:hover { color: var(--text); background: var(--bg-hover); }
+
+
+
+.url-expanded { padding: 8px 12px 10px; border-bottom: 1px solid var(--border); background: var(--bg-panel); }
+
+
+
+.url-expanded-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--text-dim); font-size: 12px; }
+
+
+
+.url-expanded-body {
+
+
+
+  margin: 0; padding: 8px 10px; max-height: 180px; overflow-y: auto; user-select: text;
+
+
+
+  border: 1px solid var(--border); border-radius: var(--radius-s);
+
+
+
+  background: var(--bg); color: var(--text);
+
+
+
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
+
+
+
+  white-space: pre-wrap; word-break: break-all;
+
+
+
+}
+
+
+
 .url-suggestions {
 
 
@@ -2158,7 +2220,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .cookie-body, .tools-body, .settings-page-body, .modal-body, .console-body,
 
-.log-list, .util-vars, .notice-list, .fail-view {
+.log-list, .util-vars, .notice-list, .fail-view, .url-expanded-body {
 
   scrollbar-gutter: stable;
 
