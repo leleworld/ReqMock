@@ -1,6 +1,6 @@
 {
   "name": "reqmock",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "API debug client + mock server desktop tool",
   "main": "electron/main.cjs",
   "private": true,
