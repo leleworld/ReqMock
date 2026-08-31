@@ -20,6 +20,7 @@ export default function KeyValueEditor({
 }) {
   const [bulk, setBulk] = useState(false);
   const [showLocked, setShowLocked] = useState(true);
+  const [filterText, setFilterText] = useState('');
   const [copied, setCopied] = useState(false);
   const listId = useId();
   const [expandIdx, setExpandIdx] = useState(-1); // 当前弹出浮层展示值的行索引
@@ -121,6 +122,27 @@ export default function KeyValueEditor({
       <div className="kv-toolbar">
         {label && <span className="kv-toolbar-label">{label}</span>}
         {toolbarExtra}
+        {!bulk && rows.length >= 8 && (() => {
+          const lc = filterText.toLowerCase();
+          const matchCount = lc
+            ? rows.filter(r => (r.key || '').toLowerCase().includes(lc) || (r.value || '').toLowerCase().includes(lc)).length
+            : rows.length;
+          return (
+            <span className="kv-filter">
+              <JbIcon name="search" size={13} />
+              <input
+                className="kv-filter-input"
+                placeholder="筛选参数..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setFilterText(''); e.target.blur(); } }}
+              />
+              {filterText && (
+                <span className="kv-filter-count">{matchCount}/{rows.length}</span>
+              )}
+            </span>
+          );
+        })()}
         <span className="flex-spacer" />
         {lockedRows.length > 0 && !bulk && (
           <button
@@ -193,8 +215,13 @@ export default function KeyValueEditor({
               </motion.div>
             )}
           </AnimatePresence>
-          {rows.map((row, i) => (
-            <div key={i} className="kv-row" data-idx={i}>
+          {rows.map((row, i) => {
+            const hidden = filterText && !(
+              (row.key || '').toLowerCase().includes(filterText.toLowerCase()) ||
+              (row.value || '').toLowerCase().includes(filterText.toLowerCase())
+            );
+            return (
+            <div key={i} className={`kv-row${hidden ? ' kv-row-hidden' : ''}`} data-idx={i}>
               <input
                 type="checkbox"
                 checked={row.enabled !== false}
@@ -235,7 +262,8 @@ export default function KeyValueEditor({
               </span>
               <span className="item-delete" title="删除此行" onClick={() => remove(i)}>×</span>
             </div>
-          ))}
+            );
+          })}
           <div className="kv-row kv-ghost">
             <input type="checkbox" checked={false} disabled />
             <input
