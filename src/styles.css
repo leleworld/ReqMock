@@ -1903,7 +1903,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  display: flex; gap: 8px; padding: 12px;
+  display: flex; gap: 8px; padding: 12px; position: relative;
 
 
 
@@ -11625,3 +11625,24 @@ body::after {
 
 .diff-unified .diff-text { flex: 1; padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
 
+
+/* ===== URL 栏进度条 ===== */
+.url-progress-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: var(--accent);
+  animation: url-progress 1.5s ease-in-out infinite;
+}
+@keyframes url-progress {
+  0% { transform: scaleX(0); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  50.01% { transform-origin: right; }
+  100% { transform: scaleX(0); transform-origin: right; }
+}
+
+/* ===== URL 栏错误状态 ===== */
+.url-input.url-error,
+.url-input.url-error:focus { border-color: var(--red); }
+.url-input-wrap:has(.url-error)::after {
+  content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px;
+  background: var(--red);
+}

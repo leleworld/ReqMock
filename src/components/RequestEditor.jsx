@@ -94,7 +94,7 @@ function ScriptSnippetPopover({ onInsert }) {
  * 请求顶栏（全宽）：方法 + URL + 发送，独立于下方分栏区，保证 URL 完整可见
  * （保存移入标题行，cURL/代码移入右侧工具条）
  */
-export function RequestBar({ request, sending, varNames = [], varMap = null, activeEnv = null, urlHistory = [], onChange, onSend, onCancel, onToast }) {
+export function RequestBar({ request, sending, error, varNames = [], varMap = null, activeEnv = null, urlHistory = [], onChange, onSend, onCancel, onToast }) {
   const [methodOpen, setMethodOpen] = useState(false);
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
       </div>
       <div className="url-input-wrap">
         <VarInput
-          className="url-input"
+          className={`url-input${error ? ' url-error' : ''}`}
           placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
           value={request.url}
           title={request.url || undefined}
@@ -292,6 +292,7 @@ export function RequestBar({ request, sending, varNames = [], varMap = null, act
       ) : (
         <button className="btn-primary" onClick={onSend}>发送</button>
       )}
+      {sending && <span className="url-progress-bar" />}
     </div>
     {urlExpanded && (
       <div className="url-expanded">

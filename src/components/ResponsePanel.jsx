@@ -85,6 +85,23 @@ export default function ResponsePanel({
   const [regexOn, setRegexOn] = useState(false);
   const [hitIdx, setHitIdx] = useState(0);
   const [wrapOn, setWrapOn] = useState(true); // 正文自动换行开关
+
+  // 自动检测响应格式，切换最合适的视图
+  const prevResponseRef = useRef(null);
+  if (response && response !== prevResponseRef.current && response.ok) {
+    prevResponseRef.current = response;
+    const ct = (response.headers && (response.headers['content-type'] || response.headers['Content-Type']) || '').toLowerCase();
+    if (ct.includes('json')) {
+      setTab('body'); setView('json');
+    } else if (ct.includes('html')) {
+      setTab('body'); setView('preview');
+    } else if (ct.includes('xml')) {
+      setTab('body'); setView('json');
+    } else if (ct.includes('image')) {
+      setTab('body'); setView('preview');
+    }
+  }
+
   const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
