@@ -30,6 +30,23 @@ const { Store } = require('./store.cjs');
 const { initUpdater } = require('./updater.cjs');
 
 let mainWindow = null;
+
+// 强调色 → 图标文件映射：应用图标（galaxy 螺旋）预渲染为 6 张强调色变体，
+// 运行时跟随设置里的强调色动态切换窗口/任务栏图标（资源管理器里的 exe 图标为默认 blue）
+const ACCENT_NAMES = ['blue', 'green', 'purple', 'orange', 'red', 'cyan'];
+
+function setAppIcon(accent) {
+  try {
+    const name = ACCENT_NAMES.includes(accent) ? accent : 'blue';
+    const dir = app.isPackaged
+      ? path.join(process.resourcesPath, 'icons')
+      : path.join(__dirname, '..', 'build', 'icons');
+    const file = path.join(dir, `icon-${name}.png`);
+    if (!fs.existsSync(file)) return;
+    const wins = BrowserWindow.getAllWindows();
+    wins.forEach((w) => { try { w.setIcon(file); } catch (e) { /* 单窗口失败忽略 */ } });
+  } catch (e) { /* 图标切换失败不影响主流程 */ }
+}
 let store = null;
 let mockServer = null;
 let wsManager = null;
@@ -160,7 +177,12 @@ function registerIpc() {
 
   // ---- 持久化 ----
   ipcMain.handle('store:load', async () => store.load());
-  ipcMain.handle('store:save', async (event, state) => store.save(state));
+  ipcMain.handle('store:save', async (event, state) => {
+    await store.save(state);
+    // 强调色变化 → 窗口/任务栏图标跟随（全量状态保存，仅在字段存在时处理）
+    if (state && state.settings) setAppIcon(state.settings.accent);
+    return { ok: true };
+  });
 
   // ---- Mock 服务 ----
   ipcMain.handle('mock:start', async (event, config) => {
@@ -317,6 +339,10 @@ app.whenReady().then(() => {
     { role: 'editMenu' }
   ]));
   store = new Store(path.join(app.getPath('userData'), 'reqmock-store.json'));
+  try {
+    const state = store.load();
+    if (state && state.settings && state.settings.accent) setAppIcon(state.settings.accent);
+  } catch (e) { /* 启动图标兜底失败不影响主流程 */ }
   mockServer = new MockServer((logEntry) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('mock:log', logEntry);

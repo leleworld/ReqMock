@@ -5,18 +5,12 @@
 import { normalizePresets } from './headerPresets.js';
 import { normalizeParamPresets } from './paramPresets.js';
 
-/* IDEA 预置主题：Islands 系列 + 经典系列，dark 标记用于明暗图标；
+/* 预置主题仅保留明暗模式三项（其余主题选项已移除，旧值由 normalizeSettings 归一为 dark）；
    system 不绑定具体配色，由系统偏好解析成 dark / light（见 resolveTheme） */
 export const THEMES = [
-  { value: 'system', label: '跟随系统', dark: null },
-  { value: 'islands-dark', label: 'Islands Dark', dark: true },
-  { value: 'islands-light', label: 'Islands Light', dark: false },
-  { value: 'islands-darcula', label: 'Islands Darcula', dark: true },
-  { value: 'high-contrast', label: 'High Contrast', dark: true },
-  { value: 'dark', label: 'Dark', dark: true },
   { value: 'light', label: 'Light', dark: false },
-  { value: 'light-header', label: 'Light with Light Header', dark: false },
-  { value: 'darcula', label: 'Darcula', dark: true }
+  { value: 'dark', label: 'Dark', dark: true },
+  { value: 'system', label: 'System', dark: null }
 ];
 
 /** 系统是否偏好深色；环境不支持 matchMedia 时按深色处理（本产品的默认观感） */

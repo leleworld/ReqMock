@@ -5991,6 +5991,13 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .about-logo { width: 34px; height: 34px; border-radius: var(--radius-m); flex-shrink: 0; }
 
+/* 应用 logo 动态渲染（galaxy 螺旋）：颜色跟随强调色，底色为强调色淡混 */
+.app-logo-dyn {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 
 
 .about-name { font-size: 15px; font-weight: 600; }

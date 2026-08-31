@@ -462,7 +462,7 @@ export function SettingsModal({ settings, onChange, onBackup, onRestore, onCheck
             {tab === 'about' && (
               <>
                 <div className="about-block-v2">
-                  <img className="about-logo" src="./icon.png" alt="" />
+                  <span className="about-logo app-logo-dyn"><JbIcon name="galaxy" size={22} /></span>
                   <div className="about-meta">
                     <div className="about-name">ReqMock <span className="about-version">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</span></div>
                     <div className="about-desc">API 调试客户端 + Mock 服务桌面工具</div>

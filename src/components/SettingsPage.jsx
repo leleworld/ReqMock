@@ -287,7 +287,7 @@ export default function SettingsPage({ settings, onChange, onBackup, onRestore, 
             <div className="sp-section-right">
               <div className="sp-item">
                 <div className="sp-about">
-                  <img className="sp-about-logo" src="./icon.png" alt="" />
+                  <span className="sp-about-logo app-logo-dyn"><JbIcon name="galaxy" size={26} /></span>
                   <div>
                     <div className="sp-about-name">ReqMock <span className="sp-about-ver">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'}</span></div>
                     <div className="sp-about-desc">API 调试客户端 + Mock 服务桌面工具</div>
