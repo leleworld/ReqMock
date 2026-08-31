@@ -19,7 +19,18 @@ const LARGE_BODY_THRESHOLD = 1024 * 1024;
 const LARGE_BODY_MAX_LINES = 5000;
 /** 页签/视图顺序：切换时据序号差决定滑动方向 */
 const RESP_TABS = ['body', 'headers', 'cookies', 'timings', 'trace', 'tests'];
-const RESP_VIEWS = ['pretty', 'raw', 'tree', 'hex', 'preview', 'diff'];
+/** 响应体视图：美化视图按内容类型展示，原始视图看原始内容，Diff 对比历史响应 */
+const RESP_VIEWS = ['json', 'html', 'xml', 'javascript', 'raw', 'hex', 'base64', 'diff'];
+/** 美化类视图：走 CodeMirror 高亮 + 体内搜索 */
+const PRETTY_VIEWS = ['json', 'html', 'xml', 'javascript'];
+/** 视图切换按钮三组：美化视图 / 原始视图 / 对比，组间渲染分隔线（Diff 依赖历史响应，无基准时置灰） */
+const VIEW_GROUPS = [[
+  ['json', 'JSON'], ['html', 'HTML'], ['xml', 'XML'], ['javascript', 'JavaScript'],
+], [
+  ['raw', 'Raw'], ['hex', 'Hex'], ['base64', 'Base64'],
+], [
+  ['diff', 'Diff']
+]];
 
 /** 重内容延迟一帧挂载：先出骨架占位，待入场动画起步后再挂 CodeMirror 等大组件，避免同帧卡顿 */
 function DeferredMount({ children }) {
@@ -55,7 +66,7 @@ function SendingTimer() {
 }
 
 /**
- * 响应面板：状态行 + Body(Pretty/Raw/Tree/Hex + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
+ * 响应面板：状态行 + Response(JSON/HTML/XML/JavaScript/Raw/Hex/Base64/Diff 横向切换 + 搜索/下载)/Headers/测试 页签 + 响应历史回看 + 布局切换 + 响应转 Mock 按钮
  * 失败时展示诊断视图：错误解释 + 排查建议 + 实际发送的请求 + 重试/复制 cURL 等快捷动作
  */
 export default function ResponsePanel({
@@ -66,7 +77,7 @@ export default function ResponsePanel({
   fontSize, tabSize, wordWrap, showLineNumbers
 }) {
   const [tab, setTab] = useState('body');
-  const [view, setView] = useState('pretty');
+  const [view, setView] = useState('json');
   const [histOpen, setHistOpen] = useState(false); // 响应历史下拉
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -107,8 +118,7 @@ export default function ResponsePanel({
 
   // 响应变化时触发格式化（小响应同步，大响应走 Worker）
   useEffect(() => {
-    if (!response || !response.ok) { setFmtResult(null); setTreeData(null); return; }
-    setTreeData(null); // 重置 Tree 缓存
+    if (!response || !response.ok) { setFmtResult(null); return; }
     const body = response.body;
     const id = ++fmtIdRef.current;
     // ≤500KB 同步处理（实测 <30ms）：避免 Worker 异步返回前 fmtResult=null 导致搜索视图瞬间显示未格式化原文
@@ -138,21 +148,29 @@ export default function ResponsePanel({
     return { prettyBody: body, tokens: null, fmtPending: pending };
   }, [response, fmtResult]);
 
-  // Tree 视图解析：按需懒解析（仅在用户切到 Tree 视图时执行，不再重复 parse）
-  const [treeData, setTreeData] = useState(null);
-  const parsedJson = useMemo(() => {
-    if (!response || !response.ok) return { ok: false };
-    if (treeData !== null) return { ok: true, data: treeData };
-    if (fmtResult && !fmtResult.isJson) return { ok: false };
-    if (fmtResult && fmtResult.isJson) return { ok: true }; // Worker 已验证合法 JSON
-    try { JSON.parse(response.body); return { ok: true }; } catch { return { ok: false }; }
-  }, [response, fmtResult, treeData]);
+  // 响应体是否为合法 JSON（决定 JSON 美化视图的语法高亮语言）
+  const isJsonBody = useMemo(() => {
+    if (!response || !response.ok) return false;
+    if (fmtResult) return fmtResult.isJson;
+    try { JSON.parse(response.body); return true; } catch { return false; }
+  }, [response, fmtResult]);
 
-  // Tree 视图懒解析：切到 Tree 时才解析完整 JSON 并缓存
+  // 新响应到达：美化类视图按 Content-Type 自动对齐（Raw/Hex/Base64 保持用户选择）
+  const lastRespRef = useRef(null);
   useEffect(() => {
-    if (view !== 'tree' || !response || !response.ok || treeData !== null) return;
-    try { setTreeData(JSON.parse(response.body)); } catch (_e) { /* 非 JSON */ }
-  }, [view, response, treeData]);
+    if (!response || !response.ok || lastRespRef.current === response) return;
+    lastRespRef.current = response;
+    setView((prev) => {
+      if (!PRETTY_VIEWS.includes(prev)) return prev;
+      const ctEntry = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type');
+      const ct = ctEntry ? ctEntry[1] : '';
+      if (/json/i.test(ct)) return 'json';
+      if (/html/i.test(ct)) return 'html';
+      if (/xml/i.test(ct)) return 'xml';
+      if (/javascript|ecmascript/i.test(ct)) return 'javascript';
+      return 'raw';
+    });
+  }, [response]);
 
   // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号；同时记录命中区间供高亮合并渲染
   const searchInfo = useMemo(() => {
@@ -190,7 +208,7 @@ export default function ResponsePanel({
 
   // Pretty 视图：将搜索查询传递给 CodeMirror 装饰系统
   const cmSearchQuery = useMemo(() => {
-    if (!searchOpen || view !== 'pretty' || !query) return null;
+    if (!searchOpen || !PRETTY_VIEWS.includes(view) || !query) return null;
     try {
       const src = regexOn ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       return { query: new RegExp(src, caseSense ? 'g' : 'gi'), activeIdx: hitCount > 0 ? curHit : -1 };
@@ -199,7 +217,7 @@ export default function ResponsePanel({
 
   // 当前命中滚动到可视区域中央（非 Pretty 视图用 DOM scrollIntoView）
   useEffect(() => {
-    if (view === 'pretty' || !contentRef.current) return;
+    if (PRETTY_VIEWS.includes(view) || !contentRef.current) return;
     const el = contentRef.current.querySelector('.search-hit-active');
     if (el) el.scrollIntoView({ block: 'center' });
   }, [curHit, searchInfo, view]);
@@ -394,7 +412,7 @@ export default function ResponsePanel({
   /** 复制当前视图的响应体（Pretty 复制美化后文本，其他复制原文） */
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(view === 'pretty' ? prettyBody : response.body);
+      await navigator.clipboard.writeText(PRETTY_VIEWS.includes(view) ? prettyBody : response.body);
       onToast && onToast('已复制响应体');
     } catch (e) {
       onToast && onToast('复制失败：' + e.message);
@@ -455,7 +473,7 @@ export default function ResponsePanel({
   const renderBodyText = () => {
     if (searchActive) {
       // Pretty 视图且有语法 token：合并渲染，既保留高亮又精确标记命中
-      if (view === 'pretty' && tokens) return renderTokensWithHits();
+      if (view === 'json' && tokens) return renderTokensWithHits();
       return searchInfo.segments.map((seg, i) =>
         seg.hit != null
           ? <mark key={i} className={seg.hit === curHit ? 'search-hit search-hit-active' : 'search-hit'}>{seg.t}</mark>
@@ -470,9 +488,6 @@ export default function ResponsePanel({
       : prettyBody;
   };
 
-  // 预览能力判断：图片（需主进程附带 bodyBase64）/ HTML / PDF
-  const respCt = (Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type') || [])[1] || '';
-  const canPreview = (/^image\//i.test(respCt) && !!response.bodyBase64) || /html/i.test(respCt) || (/pdf/i.test(respCt) && !!response.bodyBase64);
   // Diff 对比基准：本标签历史中除当前外的成功响应
   const diffBases = historyList.filter((h) => h.response !== response && h.response.ok);
 
@@ -495,7 +510,7 @@ export default function ResponsePanel({
       <LayoutGroup id="resp-tabs">
       <div className="editor-tabs">
         <button className={tab === 'body' ? 'active' : ''} onClick={() => setTab('body')}>
-          Body
+          Response
           {tab === 'body' && <motion.span className="tab-indicator" layoutId="resp-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
         </button>
         <button className={tab === 'headers' ? 'active' : ''} onClick={() => setTab('headers')}>
@@ -534,19 +549,21 @@ export default function ResponsePanel({
 
       {tab === 'body' && (
         <div className="body-toolbar">
+          {/* 视图切换：横向平铺（JSON/HTML/XML/JavaScript/Raw/Hex/Base64/Diff） */}
           <div className="view-switch">
-            {[['pretty', 'Pretty'], ['raw', 'Raw'], ['tree', 'Tree'], ['hex', 'Hex'], ['preview', '预览'], ['diff', 'Diff']].map(([v, label]) => (
-              <button
-                key={v}
-                className={view === v ? 'active' : ''}
-                disabled={(v === 'tree' && !parsedJson.ok) || (v === 'preview' && !canPreview) || (v === 'diff' && diffBases.length === 0)}
-                title={
-                  v === 'tree' && !parsedJson.ok ? '响应不是 JSON'
-                    : v === 'preview' && !canPreview ? '仅图片 / HTML / PDF 响应支持预览'
-                    : v === 'diff' && diffBases.length === 0 ? '再次发送后可与历史响应对比' : undefined
-                }
-                onClick={() => setView(v)}
-              >{label}</button>
+            {VIEW_GROUPS.map((grp, gi) => (
+              <React.Fragment key={gi}>
+                {gi > 0 && <span className="view-sep" aria-hidden="true" />}
+                {grp.map(([v, label]) => (
+                  <button
+                    key={v}
+                    className={view === v ? 'active' : ''}
+                    disabled={v === 'diff' && diffBases.length === 0}
+                    title={v === 'diff' && diffBases.length === 0 ? '再次发送后可与历史响应对比' : undefined}
+                    onClick={() => setView(v)}
+                  >{label}</button>
+                ))}
+              </React.Fragment>
             ))}
           </div>
           <span className="flex-spacer" />
@@ -596,15 +613,15 @@ export default function ResponsePanel({
           <button className="search-toggle" title="上一个 (Shift+Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx - 1)}>↑</button>
           <button className="search-toggle" title="下一个 (Enter)" disabled={!hitCount} onClick={() => setHitIdx(hitIdx + 1)}>↓</button>
           <button className="search-toggle" title="关闭" onClick={() => { setSearchOpen(false); setQuery(''); }}><JbIcon name="close" size={12} /></button>
-          {(view === 'tree' || view === 'hex') && <span className="env-hint">搜索仅在 Pretty / Raw 视图生效</span>}
+          {(view === 'hex' || view === 'base64') && <span className="env-hint">搜索仅在美化 / Raw 视图生效</span>}
         </div>
       )}
 
       <div className="response-content" ref={contentRef} onMouseUp={handleMouseUp}>
         {/* 页签/视图切换时方向滑动交叉淡出；滚动容器下沉到 pane 层；重内容延迟一帧挂载 */}
         <div className="response-pane">
-        {/* Pretty 视图：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
-        {tab === 'body' && view === 'pretty' && (
+        {/* 美化视图（JSON/HTML/XML/JavaScript）：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
+        {tab === 'body' && PRETTY_VIEWS.includes(view) && (
           <DeferredMount>
             {response.body.length > LARGE_BODY_THRESHOLD && (
               <div className="large-body-banner">
@@ -613,7 +630,7 @@ export default function ResponsePanel({
                 <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
               </div>
             )}
-            <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={parsedJson.ok ? 'json' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
+            <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={view === 'json' ? (isJsonBody ? 'json' : 'text') : view === 'javascript' ? 'javascript' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
           </DeferredMount>
         )}
         {tab === 'body' && view === 'raw' && (
@@ -632,15 +649,8 @@ export default function ResponsePanel({
             </pre>
           </DeferredMount>
         )}
-        {tab === 'body' && view === 'tree' && (
-          <DeferredMount>
-            {parsedJson.ok
-              ? <div className="json-tree"><JsonTree data={parsedJson.data} onExtractVariable={onExtractVariable} onInsertAssertion={onInsertAssertion} onToast={onToast} /></div>
-              : <div className="empty-hint" style={{ padding: 12 }}>响应不是合法 JSON，无法以 Tree 视图展示</div>}
-          </DeferredMount>
-        )}
         {tab === 'body' && view === 'hex' && <DeferredMount><HexView text={response.body} /></DeferredMount>}
-        {tab === 'body' && view === 'preview' && <PreviewView response={response} contentType={respCt} />}
+        {tab === 'body' && view === 'base64' && <DeferredMount><Base64View text={response.body} /></DeferredMount>}
         {tab === 'body' && view === 'diff' && <DiffView response={response} bases={diffBases} />}
         {tab === 'headers' && (
           <table className="headers-table">
@@ -824,254 +834,19 @@ function buildSentUrl(finalReq) {
   }
 }
 
-/** JSON Tree 虚拟滚动视图：只渲染可视区域行，万级节点秒开；右键节点可复制值/路径/提取为变量 */
-const TREE_ROW_H = 22;
-const TREE_BUFFER = 8;
 
-/** 按 '$.a.b.0' 形式路径取子节点值（轻量实现，键名含 '.' 时不保证准确） */
-function getByPath(data, path) {
-  if (path === '$') return data;
-  let cur = data;
-  for (const p of path.slice(2).split('.')) {
-    if (cur == null) return undefined;
-    cur = cur[Array.isArray(cur) ? Number(p) : p];
-  }
-  return cur;
-}
-
-/** 将内部路径 $.data.list.0.name 转为 JS 访问路径 data.list[0].name */
-function pathToAccessor(internalPath) {
-  if (internalPath === '$') return '';
-  const parts = internalPath.slice(2).split('.');
-  let result = '';
-  for (const p of parts) {
-    if (/^\d+$/.test(p)) {
-      result += `[${p}]`;
-    } else if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(p)) {
-      result += (result ? '.' : '') + p;
-    } else {
-      result += `["${p.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`;
-    }
-  }
-  return result;
-}
-
-function JsonTree({ data, onExtractVariable, onInsertAssertion, onToast }) {
-  const scrollRef = useRef(null);
-  const expandedRef = useRef(new Set());
-  const [, setTick] = useState(0);
-  const [menu, setMenu] = useState(null); // { path, x, y }
-
-  // 右键菜单：点击外部 / Esc 关闭
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
-    window.addEventListener('mousedown', close);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', close);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menu]);
-
-  const openMenu = (e, path) => {
-    e.preventDefault();
-    setMenu({ path, x: Math.min(e.clientX, window.innerWidth - 200), y: Math.min(e.clientY, window.innerHeight - 160) });
-  };
-
-  const copyText = async (text, tip) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      onToast && onToast(tip);
-    } catch (e) {
-      onToast && onToast('复制失败：' + e.message);
-    }
-  };
-
-  const menuValue = menu ? getByPath(data, menu.path) : undefined;
-  const menuIsLeaf = menu && (menuValue === null || typeof menuValue !== 'object');
-
-  // 初始化：默认展开前两层
-  useEffect(() => {
-    const expanded = new Set();
-    (function init(d, path, depth) {
-      if (d === null || typeof d !== 'object' || depth > 1) return;
-      expanded.add(path);
-      const entries = Array.isArray(d) ? d.map((v, i) => [i, v]) : Object.entries(d);
-      for (const [k, v] of entries) init(v, path + '.' + k, depth + 1);
-    })(data, '$', 0);
-    expandedRef.current = expanded;
-    setTick(1);
-  }, [data]);
-
-  const toggle = useCallback((path) => {
-    const s = expandedRef.current;
-    if (s.has(path)) s.delete(path); else s.add(path);
-    setTick((t) => t + 1);
-  }, []);
-
-  // 扁平化：只遍历已展开节点，生成可视行列表
-  const rows = useMemo(() => {
-    const result = [];
-    const expanded = expandedRef.current;
-    (function walk(d, path, depth, name) {
-      if (d === null || typeof d !== 'object') {
-        result.push({ depth, name, value: d, expandable: false, path });
-        return;
-      }
-      const isArr = Array.isArray(d);
-      const entries = isArr ? d.map((v, i) => [i, v]) : Object.entries(d);
-      const br = isArr ? ['[', ']'] : ['{', '}'];
-      const isExp = expanded.has(path);
-      result.push({ depth, name, expandable: true, expanded: isExp, count: entries.length, bracket: br[0], path });
-      if (isExp) {
-        for (const [k, v] of entries) walk(v, path + '.' + k, depth + 1, k);
-        result.push({ depth, closing: true, bracket: br[1], path });
-      }
-    })(data, '$', 0, undefined);
-    return result;
-  }, [data, expandedRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 虚拟滚动：只渲染可视区域 + 上下缓冲行
-  const onScroll = useCallback(() => {
-    setTick((t) => t + 1);
-  }, []);
-
-  const scrollTop = scrollRef.current ? scrollRef.current.scrollTop : 0;
-  const clientH = scrollRef.current ? scrollRef.current.clientHeight : 600;
-  const totalH = rows.length * TREE_ROW_H;
-  const startIdx = Math.max(0, Math.floor(scrollTop / TREE_ROW_H) - TREE_BUFFER);
-  const endIdx = Math.min(rows.length, Math.ceil((scrollTop + clientH) / TREE_ROW_H) + TREE_BUFFER);
-  const visible = rows.slice(startIdx, endIdx);
-
-  return (
-    <div className="jt-vscroll" ref={scrollRef} onScroll={onScroll}>
-      <div style={{ height: totalH, position: 'relative' }}>
-        {visible.map((row, i) => {
-          const idx = startIdx + i;
-          const top = idx * TREE_ROW_H;
-          if (row.closing) {
-            return (
-              <div key={row.path + '/c'} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }}>
-                <span className="jt-toggle-placeholder" />
-                <span className="jt-bracket">{row.bracket}</span>
-              </div>
-            );
-          }
-          if (!row.expandable) {
-            return (
-              <div key={row.path} className="jt-row" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onContextMenu={(e) => openMenu(e, row.path)}>
-                <span className="jt-toggle-placeholder" />
-                {row.name !== undefined && (
-                  <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
-                )}
-                <span className={`jt-val jt-${row.value === null ? 'null' : typeof row.value}`}>
-                  {typeof row.value === 'string' ? `"${row.value}"` : String(row.value)}
-                </span>
-              </div>
-            );
-          }
-          return (
-            <div key={row.path} className="jt-row jt-clickable" style={{ position: 'absolute', top, left: 0, right: 0, height: TREE_ROW_H, paddingLeft: row.depth * 16 }} onClick={() => toggle(row.path)} onContextMenu={(e) => openMenu(e, row.path)}>
-              <span className="jt-toggle"><JbIcon name={row.expanded ? 'chevron-down' : 'chevron-right'} size={11} /></span>
-              {row.name !== undefined && (
-                <span className="jt-key">{typeof row.name === 'number' ? row.name : `"${row.name}"`}<span className="jt-colon">: </span></span>
-              )}
-              <span className="jt-bracket">{row.bracket}</span>
-              {!row.expanded && <span className="jt-ellipsis">{'\u2026'} {row.count} 项</span>}
-            </div>
-          );
-        })}
-      </div>
-      {menu && (
-        <div className="ctx-menu" style={{ position: 'fixed', left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
-          <div
-            className="ctx-item"
-            onClick={() => {
-              const v = menuValue;
-              copyText(typeof v === 'string' ? v : JSON.stringify(v, null, 2), '已复制节点值');
-              setMenu(null);
-            }}
-          >复制值</div>
-          <div className="ctx-item" onClick={() => { copyText(menu.path, '已复制节点路径'); setMenu(null); }}>复制路径（{menu.path.length > 24 ? '…' + menu.path.slice(-22) : menu.path}）</div>
-          {menuIsLeaf && onExtractVariable && (
-            <div
-              className="ctx-item"
-              onClick={() => {
-                const seg = menu.path.split('.').filter((s) => s !== '$' && !/^\d+$/.test(s));
-                onExtractVariable(String(menuValue ?? ''), seg[seg.length - 1] || 'extracted');
-                setMenu(null);
-              }}
-            >提取为环境变量…</div>
-          )}
-          {onInsertAssertion && menu.path !== '$' && (
-            <>
-              <div className="ctx-sep" />
-              {menuIsLeaf && (
-                <div
-                  className="ctx-item"
-                  onClick={() => {
-                    const accessor = pathToAccessor(menu.path);
-                    const val = menuValue;
-                    const valStr = typeof val === 'string' ? `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'` : String(val);
-                    const lastKey = menu.path.split('.').pop();
-                    const label = /^\d+$/.test(lastKey) ? accessor : lastKey;
-                    const code = `rm.test('${label} 应为 ${typeof val === 'string' ? val.slice(0, 20) : val}', () => {\n  rm.expect(rm.response.json().${accessor}).toBe(${valStr});\n});`;
-                    onInsertAssertion(code);
-                    setMenu(null);
-                  }}
-                >断言此字段值</div>
-              )}
-              <div
-                className="ctx-item"
-                onClick={() => {
-                  const accessor = pathToAccessor(menu.path);
-                  const code = `rm.test('应包含 ${accessor}', () => {\n  rm.expect(rm.response.json().${accessor}).toBeDefined();\n});`;
-                  onInsertAssertion(code);
-                  setMenu(null);
-                }}
-              >断言字段存在</div>
-              {menuIsLeaf && (
-                <div
-                  className="ctx-item"
-                  onClick={() => {
-                    const accessor = pathToAccessor(menu.path);
-                    const val = menuValue;
-                    const typeStr = val === null ? 'object' : typeof val;
-                    const code = `rm.test('${accessor} 应为 ${typeStr}', () => {\n  rm.expect(typeof rm.response.json().${accessor}).toBe('${typeStr}');\n});`;
-                    onInsertAssertion(code);
-                    setMenu(null);
-                  }}
-                >断言字段类型</div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** 预览视图：图片（data URL）/ HTML（沙箱 iframe）/ PDF */
-function PreviewView({ response, contentType }) {
-  const ct = String(contentType || '').split(';')[0].trim();
-  if (/^image\//i.test(ct) && response.bodyBase64) {
-    return (
-      <div className="preview-view">
-        <img className="preview-img" src={`data:${ct};base64,${response.bodyBase64}`} alt="响应图片预览" />
-        <div className="env-hint">图片预览（{ct}，{formatSize(response.sizeBytes)}），可用上方下载按钮保存原文件</div>
-      </div>
-    );
-  }
-  if (/pdf/i.test(ct) && response.bodyBase64) {
-    return <iframe className="preview-frame" src={`data:application/pdf;base64,${response.bodyBase64}`} title="PDF 预览" />;
-  }
-  if (/html/i.test(ct)) {
-    // 沙箱 iframe：禁脚本禁同源，仅静态渲染
-    return <iframe className="preview-frame" sandbox="" srcDoc={response.body} title="HTML 预览" />;
-  }
-  return <div className="empty-hint" style={{ padding: 12 }}>该 Content-Type（{ct || '未知'}）暂不支持预览</div>;
+/** Base64 视图：响应体按 UTF-8 编码为 base64 文本（1MB 以上提示下载） */
+function Base64View({ text }) {
+  const b64 = useMemo(() => {
+    if (text.length > LARGE_BODY_THRESHOLD) return null;
+    const bytes = new TextEncoder().encode(text || '');
+    let bin = '';
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    return btoa(bin);
+  }, [text]);
+  if (b64 === null) return <div className="empty-hint" style={{ padding: 12 }}>响应体较大，Base64 视图仅支持 1MB 以内，请下载后查看</div>;
+  return <pre className="response-body nowrap">{b64}</pre>;
 }
 
 /** JSON 优先美化后再逐行对比，非 JSON 按原文对比 */

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 import KeyValueEditor from './KeyValueEditor.jsx';
@@ -20,7 +20,7 @@ import { ParamPresetsModal } from './Modals.jsx';
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
 const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
-/** 页签行常驻显示的高频三项；其余收进右侧「更多页签」下拉，宽度不足时连常驻项也只留当前页签 */
+/** 常驻页签：无论容器多窄都不收进「更多」菜单、不让位给当前页签 */
 const PINNED_TABS = ['params', 'body', 'headers'];
 
 /** Body 类型：内部值 → 显示名 / 说明（下拉分组菜单用） */
@@ -339,9 +339,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     if (m === 'GET') setTab('params');
     else if (m === 'POST') setTab('body');
   }, [request]);
-  // ---- 页签可见性：常驻 Params/Body/Headers + 当前页签；其余收进「更多页签」下拉 ----
-  // 不做窄宽度塌缩：窄容器由 .editor-tabs 既有的横向滚动兜底，三项始终可见可点
-  // 「更多页签」下拉：{ top, left } | null
+  // 「更多页签」（»）下拉：{ top, left } | null
   const [tabsMenu, setTabsMenu] = useState(null);
 
   // Body 类型下拉：{ top, left } | null（复用同一套外部点击/Esc 关闭逻辑）
@@ -592,8 +590,15 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     </>
   );
 
-  // ---- 页签可见性策略（对标 Postman）----
-  // 常驻高频三项，其余收进右侧向下三角；容器再窄就塌缩成「只显示当前页签」
+  // ---- 页签可见性（Bruno 式溢出收纳，对标 Bruno 的标签栏行为）----
+  // 按原顺序尽量填满行宽，放不下的收进行尾 » 菜单（菜单只列被隐藏的页签）；
+  // 当前页签若被挤掉则强制补到可见区末尾。各页签自然宽由隐藏 sizer 一次量出，
+  // 行宽变化走 ResizeObserver，判定是纯算术比较——不回读 scrollWidth，无两档抖动。
+  const tabsRowRef = useRef(null);
+  const tabsSizerRef = useRef(null);
+  // 首帧先全显（常规宽度下即终态，避免闪一下 » ）
+  const [visibleKeys, setVisibleKeys] = useState(TAB_ORDER);
+
   const tabDefs = [
     ['params', 'Params', request.params.filter((p) => p.key).length, false, true],
     ['body', 'Body', 0, request.bodyType !== 'none', false],
@@ -604,15 +609,74 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     ['doc', '文档', 0, !!request.doc, false],
     ['examples', '示例', (request.examples || []).length, false, true]
   ];
-  const activeDef = tabDefs.find((d) => d[0] === tab) || tabDefs[0];
-  const pinnedDefs = tabDefs.filter((d) => PINNED_TABS.includes(d[0]));
-  // 常驻三项恒显示；当前页签不在三项之中时内联追加显示（切换目标一眼可见）
-  const shownDefs = PINNED_TABS.includes(tab) ? pinnedDefs : [...pinnedDefs, activeDef];
+
+  /** Bruno 式溢出判定：返回应显示的页签 key 序列。
+      常驻三项（PINNED_TABS）打底永不收纳；其余按原序尽量装下；
+      当前页签被挤掉时补到可见区末尾（让位的只可能是非常驻项） */
+  const computeVisibleTabs = () => {
+    const row = tabsRowRef.current;
+    const sizer = tabsSizerRef.current;
+    if (!row || !sizer) return null;
+    const rowStyle = getComputedStyle(row);
+    const avail = row.clientWidth - parseFloat(rowStyle.paddingLeft) - parseFloat(rowStyle.paddingRight);
+    if (!(avail > 0)) return null;
+    const widths = Array.from(sizer.querySelectorAll(':scope > button')).map((b) => b.offsetWidth);
+    const moreWrap = sizer.querySelector('.editor-tabs-more-wrap');
+    const moreW = moreWrap ? moreWrap.offsetWidth : 0;
+    const GAP = 2; // 与 .editor-tabs 的 gap 保持一致
+    const all = tabDefs.map((d) => d[0]);
+    const n = all.length;
+    const sumW = (list) => list.reduce((acc, i) => acc + widths[i], 0) + GAP * Math.max(0, list.length - 1);
+    if (sumW([...Array(n).keys()]) <= avail) return all; // 全放得下：无 »
+    // 放不下：预留 » 入口宽度，常驻三项打底，其余按原序尽量装下
+    const budget = avail - moreW - GAP;
+    const pinnedIdx = [];
+    const restIdx = [];
+    tabDefs.forEach((d, i) => (PINNED_TABS.includes(d[0]) ? pinnedIdx : restIdx).push(i));
+    const vis = [...pinnedIdx];
+    let cum = sumW(pinnedIdx);
+    for (const i of restIdx) {
+      if (cum + GAP + widths[i] <= budget) {
+        vis.push(i);
+        cum += GAP + widths[i];
+      }
+    }
+    const activeIdx = Math.max(0, tabDefs.findIndex((d) => d[0] === tab));
+    if (!vis.includes(activeIdx)) {
+      // 当前页签被挤掉：可见区末尾的非常驻项逐个让位，把它补到末尾
+      const list = [...vis];
+      while (list.length > pinnedIdx.length && sumW([...list, activeIdx]) + GAP + moreW > avail) list.pop();
+      list.push(activeIdx);
+      return list.map((i) => all[i]);
+    }
+    return vis.map((i) => all[i]);
+  };
+
+  // ResizeObserver 闭包只建一次，经 ref 取最新判定函数，避免拿到旧 tabDefs / 旧 tab
+  const computeVisibleRef = useRef(computeVisibleTabs);
+  computeVisibleRef.current = computeVisibleTabs;
+  const applyVisible = (next) => {
+    if (!next) return;
+    setVisibleKeys((prev) => (prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next));
+  };
+  // 每次渲染后重算：页签数量 / 计数 / 当前页签变化的收敛点（值不变时 setState 被跳过，不会死循环）
+  useLayoutEffect(() => { applyVisible(computeVisibleTabs()); });
+  // 行宽变化（拖窗口、拖分栏）触发重算
+  useEffect(() => {
+    const row = tabsRowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => applyVisible(computeVisibleRef.current()));
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, []);
+
+  const visibleDefs = visibleKeys.map((k) => tabDefs.find((d) => d[0] === k)).filter(Boolean);
+  const hiddenDefs = tabDefs.filter((d) => !visibleKeys.includes(d[0]));
 
   const renderTabBtn = ([key, label, count, hasDot, hasCount]) => (
     <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
       {label}
-      {hasCount && <span className={`tab-count${count ? '' : ' is-empty'}`}>({count})</span>}
+      {hasCount && count > 0 && <span className="tab-count">({count})</span>}
       {hasDot && <span className="dot-indicator" />}
       {tab === key && <motion.span className="tab-indicator" layoutId="req-tab-indicator" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
     </button>
@@ -620,29 +684,44 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
 
   return (
     <div className="request-editor">
-      <div className="editor-tabs">
-        {shownDefs.map(renderTabBtn)}
+      <div className="editor-tabs" ref={tabsRowRef}>
+        {visibleDefs.map(renderTabBtn)}
+        {hiddenDefs.length > 0 && (
+          <span className="editor-tabs-more-wrap">
+            <button
+              className={`editor-tabs-more${tabsMenu ? ' on' : ''}`}
+              title="更多页签"
+              aria-label="更多页签"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setTabsMenu(tabsMenu ? null : { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180) });
+              }}
+            ><JbIcon name="double-chevron-right" size={14} /></button>
+            {tabsMenu && (
+              <div className="ctx-menu hp-menu editor-tabs-menu" style={{ top: tabsMenu.top, left: tabsMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
+                {hiddenDefs.map(([key, label, count, , hasCount]) => (
+                  <div key={key} className="ctx-item" onClick={() => { setTab(key); setTabsMenu(null); }}>
+                    <span className="ctx-label">{label}</span>
+                    {hasCount && count > 0 && <span className="ctx-kbd">{count}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* 隐藏 sizer：与页签行同款类（.editor-tabs）保证量出的自然宽一致，一次量完不参与交互 */}
+      <div className="editor-tabs editor-tabs-sizer" ref={tabsSizerRef} aria-hidden="true">
+        {tabDefs.map(([key, label, count, hasDot, hasCount]) => (
+          <button key={key} className={tab === key ? 'active' : ''} tabIndex={-1}>
+            {label}
+            {hasCount && count > 0 && <span className="tab-count">({count})</span>}
+            {hasDot && <span className="dot-indicator" />}
+          </button>
+        ))}
         <span className="editor-tabs-more-wrap">
-          <button
-            className={`editor-tabs-more${tabsMenu ? ' on' : ''}`}
-            title="选择要显示的页签"
-            aria-label="更多页签"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setTabsMenu(tabsMenu ? null : { top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 180) });
-            }}
-          ><JbIcon name="more-options" size={14} /></button>
-          {tabsMenu && (
-            <div className="ctx-menu hp-menu editor-tabs-menu" style={{ top: tabsMenu.top, left: tabsMenu.left }} onMouseDown={(e) => e.stopPropagation()}>
-              {tabDefs.map(([key, label, count, , hasCount]) => (
-                <div key={key} className="ctx-item" onClick={() => { setTab(key); setTabsMenu(null); }}>
-                  <span className="ctx-check">{tab === key ? <JbIcon name="checkmark" size={12} /> : ''}</span>
-                  <span className="ctx-label">{label}</span>
-                  {hasCount && count > 0 && <span className="ctx-kbd">{count}</span>}
-                </div>
-              ))}
-            </div>
-          )}
+          <button className="editor-tabs-more" tabIndex={-1}><JbIcon name="double-chevron-right" size={14} /></button>
         </span>
       </div>
 

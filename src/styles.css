@@ -2129,6 +2129,19 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
+/* Bruno 式溢出收纳的隐藏 sizer：与页签行同款类（.editor-tabs）保证量出的自然宽一致。
+   fixed 移出视口 + visibility:hidden，不参与交互、不产生滚动条；
+   量宽在布局阶段一次完成，配合 ResizeObserver 做纯算术判定，不回读 scrollWidth */
+.editor-tabs.editor-tabs-sizer {
+
+  position: fixed; top: -9999px; left: 0;
+
+  visibility: hidden; pointer-events: none;
+
+}
+
+
+
 /* 「更多页签」入口：紧跟最后一个页签（margin-left:auto 会把它推到行尾，中间隔出大段空白像悬浮孤块） */
 
 .editor-tabs-more-wrap {
@@ -2151,7 +2164,8 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 「更多页签」入口：⋮ 图标 + 左分隔线，视觉上是行尾一个独立控件（10px 小三角曾被反馈太不显眼） */
+/* 「更多页签」入口：» 图标（10px 小三角与 ⋮+左分隔线方案先后被否：
+   分隔线在窄行距下像多余竖线，» 紧贴前一个页签更干净） */
 
 .editor-tabs .editor-tabs-more {
 
@@ -2163,9 +2177,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
   min-width: 34px; padding: 0 8px; border: none; border-bottom: 1px solid transparent;
 
-
-
-  border-left: 1px solid var(--border); border-radius: 0;
+  border-radius: 0;
 
 
 
@@ -2199,11 +2211,15 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-  /* 计数已改为内联固定宽度占位（.tab-count），此处不再额外留槽；
-     状态点绝对定位落在 14px 内边距里，不占文字宽度。
+  /* 计数内联渲染（有计数才出现），此处不额外留槽；
+     状态点绝对定位落在横向内边距里，不占文字宽度。
      注意 .editor-tabs-more 的背景需带 !important：本规则与它同为一条选择器链上的
      button 规则，靠后者覆盖（background:none）会让「透明」声明被吃掉 */
-  padding: 8px 14px; background: none !important; color: var(--text-dim);
+  /* 13px 字号 + 10px 横向 padding：对齐 Postman/Bruno 的页签密度（15px/14px 时
+     Params/Headers 因计数占位显得过宽，窄容器下挤占过多行宽） */
+  padding: 8px 10px; background: none !important; color: var(--text-dim);
+
+  font-size: 13px;
 
 
 
@@ -2219,15 +2235,13 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 页签计数：内联括号（与 Postman/Apifox 视觉一致），但固定宽度 + 等宽数字，
-
-   让「有无计数、1 位还是 3 位」都不改变按钮宽度 */
+/* 页签计数：内联括号（与 Postman/Apifox 视觉一致），自然宽度（占位方案已否） */
 
 .tab-count {
 
 
 
-  display: inline-block; min-width: 2.6em; margin-left: 2px; text-align: left;
+  display: inline-block; margin-left: 2px;
 
 
 
@@ -2243,9 +2257,9 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-/* 计数为 0 时保留占位、不显示刺眼的 (0) */
+/* 计数为 0 时不渲染（旧方案是 visibility:hidden 占位，仍占 2.6em 宽；display:none 双保险） */
 
-.tab-count.is-empty { visibility: hidden; }
+.tab-count.is-empty { visibility: hidden; display: none; }
 
 
 
@@ -2327,7 +2341,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.kv-value { flex: 1; padding: 6px 8px; }
+.kv-value { flex: 1; min-width: 0; padding: 6px 8px; }
 
 
 
@@ -3915,7 +3929,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-item {
 
-
+  position: relative;
 
   display: flex; align-items: center; gap: 6px;
 
@@ -3959,20 +3973,29 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .tab-item:hover { background: var(--bg-hover); }
 
+/* 相邻标签分隔线：1px 竖线落在 2px gap 内；首项、激活/悬停项及其右邻隐藏，保证激活块视觉独立。
+   ::before 与拖拽左指示条同用（拖拽规则在后且 display:block，拖拽时正常覆盖） */
+.tab-item::before {
+  content: '';
+  position: absolute; left: -1.5px; top: 9px; bottom: 9px;
+  width: 1px; background: var(--border);
+  pointer-events: none;
+}
 
+.tab-item:first-child::before,
+.tab-item.active::before,
+.tab-item:hover::before,
+.tab-item.active + .tab-item::before,
+.tab-item:hover + .tab-item::before,
+/* 激活块左邻的分隔线也隐藏：激活块自带两侧描边，避免并排双线 */
+.tab-item:has(+ .tab-item.active)::before {
+  display: none;
+}
 
 .tab-item.active {
-
-
-
-  background: var(--bg-active); color: var(--text);
-
-
-
-  box-shadow: inset 0 2px 0 var(--accent);
-
-
-
+  background: var(--bg-active); color: var(--text); font-weight: 600;
+  /* 顶条 + 两侧描边：激活块在分隔线中间形成清晰的「凸起」块面 */
+  box-shadow: inset 0 2px 0 var(--accent), inset 1px 0 0 var(--border), inset -1px 0 0 var(--border);
 }
 
 
@@ -4167,7 +4190,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.tab-group .tab-item.active { box-shadow: inset 0 2px 0 var(--accent); }
+.tab-group .tab-item.active { box-shadow: inset 0 2px 0 var(--accent), inset 1px 0 0 var(--border), inset -1px 0 0 var(--border); }
 
 
 
@@ -4344,6 +4367,8 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 .tab-item.drag-over-left::before {
+
+  display: block;
 
 
 
@@ -4615,11 +4640,12 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 
 
-.auth-input { flex: 1; padding: 6px 10px; }
+.auth-input { flex: 1; min-width: 120px; padding: 6px 10px; }
 
 
 
-.auth-type-select { padding: 6px 10px; }
+/* min-width:0 放开 select 的内在宽度下限，窄容器里可与标签列一起收缩不溢出 */
+.auth-type-select { padding: 6px 10px; min-width: 0; max-width: 100%; }
 
 
 
@@ -6369,7 +6395,9 @@ body.resizing { user-select: none; cursor: col-resize; }
 
 .sp-item-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
 
-.sp-item-row > div { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+/* 窄窗口不横向溢出：左侧标题/说明列放开下限让文字换行，右侧控件不收缩保持右对齐 */
+.sp-item-row > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.sp-item-row > select, .sp-item-row > label { flex-shrink: 0; }
 
 .sp-item-header { display: flex; flex-direction: column; gap: 2px; }
 
@@ -7020,6 +7048,10 @@ button:not(:disabled):active { transform: scale(0.96); }
 
 
 .view-switch { display: flex; gap: 2px; background: var(--bg); border-radius: var(--radius-s); padding: 2px; }
+
+
+/* 组间分隔线：美化 / 原始 / 对比 三段 */
+.view-sep { width: 1px; align-self: stretch; margin: 3px 5px; background: var(--border); }
 
 
 

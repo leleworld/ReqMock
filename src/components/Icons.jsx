@@ -51,6 +51,7 @@ import lockSvg from '@jetbrains/icons/lock.svg?raw';
 import collapseSvg from '@jetbrains/icons/collapse.svg?raw';
 import locateSvg from '@jetbrains/icons/locate.svg?raw';
 import moreOptionsSvg from '@jetbrains/icons/more-options.svg?raw';
+import doubleChevronRightSvg from '@jetbrains/icons/double-chevron-right.svg?raw';
 
 /** 图标名 -> SVG 源码映射，新增图标时在此登记 */
 export const ICONS = {
@@ -104,7 +105,8 @@ export const ICONS = {
   lock: lockSvg,
   collapse: collapseSvg,
   locate: locateSvg,
-  'more-options': moreOptionsSvg
+  'more-options': moreOptionsSvg,
+  'double-chevron-right': doubleChevronRightSvg
 };
 
 /**
