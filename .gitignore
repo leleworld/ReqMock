@@ -4,3 +4,10 @@ release/
 _output/
 .qoder/
 *.log
+.idea/
+design-previews/
+P0-*.md
+P1-*.md
+P2-*.md
+BUG-REPORT.md
+*.bak.*

@@ -1,5 +1,7 @@
 @echo off
 setlocal
+rem 切回仓库根目录（本脚本位于 tools\ 下）
+cd /d "%~dp0.."
 
 echo ============================================
 echo  ReqMock Windows Installer Build
