@@ -155,29 +155,21 @@ export default function ResponsePanel({
     try { JSON.parse(response.body); return true; } catch { return false; }
   }, [response, fmtResult]);
 
-  // 新响应到达：根据 Content-Type 自动选择最佳 tab + view（覆盖所有视图，不再仅限 PRETTY_VIEWS）
+  // 新响应到达：美化类视图按 Content-Type 自动对齐（Raw/Hex/Base64 保持用户选择）
   const lastRespRef = useRef(null);
   useEffect(() => {
     if (!response || !response.ok || lastRespRef.current === response) return;
     lastRespRef.current = response;
-    const ctEntry = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type');
-    const ct = ctEntry ? ctEntry[1] : '';
-    // 自动切换到 body 页签
-    setTab('body');
-    // 根据 Content-Type 自动选择最佳视图
-    if (/json/i.test(ct)) {
-      setView('json');
-    } else if (/html/i.test(ct)) {
-      setView('html');
-    } else if (/xml/i.test(ct)) {
-      setView('xml');
-    } else if (/javascript|ecmascript/i.test(ct)) {
-      setView('javascript');
-    } else if (/image\//i.test(ct)) {
-      setView('base64');
-    } else {
-      setView('raw');
-    }
+    setView((prev) => {
+      if (!PRETTY_VIEWS.includes(prev)) return prev;
+      const ctEntry = Object.entries(response.headers).find(([k]) => k.toLowerCase() === 'content-type');
+      const ct = ctEntry ? ctEntry[1] : '';
+      if (/json/i.test(ct)) return 'json';
+      if (/html/i.test(ct)) return 'html';
+      if (/xml/i.test(ct)) return 'xml';
+      if (/javascript|ecmascript/i.test(ct)) return 'javascript';
+      return 'raw';
+    });
   }, [response]);
 
   // 体内搜索：把当前视图文本切成 普通段/命中段，命中段带序号；同时记录命中区间供高亮合并渲染
@@ -344,7 +336,7 @@ export default function ResponsePanel({
   }
   if (!response) {
     return (
-      <div className="response-panel response-empty">
+      <div className="response-panel">
         <div className="response-corner">{cornerActions}</div>
         <div className="response-placeholder">
           <div className="empty-hero">

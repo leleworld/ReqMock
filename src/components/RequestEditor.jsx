@@ -21,7 +21,7 @@ const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
 const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
 /** 常驻页签：无论容器多窄都不收进「更多」菜单、不让位给当前页签 */
-const PINNED_TABS = ['params', 'body', 'headers', 'auth'];
+const PINNED_TABS = ['params', 'body', 'headers'];
 
 /** Body 类型：内部值 → 显示名 / 说明（下拉分组菜单用） */
 const BODY_TYPE_LABELS = {
@@ -94,7 +94,7 @@ function ScriptSnippetPopover({ onInsert }) {
  * 请求顶栏（全宽）：方法 + URL + 发送，独立于下方分栏区，保证 URL 完整可见
  * （保存移入标题行，cURL/代码移入右侧工具条）
  */
-export function RequestBar({ request, sending, error, varNames = [], varMap = null, activeEnv = null, urlHistory = [], onChange, onSend, onCancel, onToast }) {
+export function RequestBar({ request, sending, varNames = [], varMap = null, activeEnv = null, urlHistory = [], onChange, onSend, onCancel, onToast }) {
   const [methodOpen, setMethodOpen] = useState(false);
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function RequestBar({ request, sending, error, varNames = [], varMap = nu
       </div>
       <div className="url-input-wrap">
         <VarInput
-          className={`url-input${error ? ' url-error' : ''}`}
+          className="url-input"
           placeholder="http://localhost:8080/api/...（可直接粘贴 cURL 命令）"
           value={request.url}
           title={request.url || undefined}
@@ -292,7 +292,6 @@ export function RequestBar({ request, sending, error, varNames = [], varMap = nu
       ) : (
         <button className="btn-primary" onClick={onSend}>发送</button>
       )}
-      {sending && <span className="url-progress-bar" />}
     </div>
     {urlExpanded && (
       <div className="url-expanded">

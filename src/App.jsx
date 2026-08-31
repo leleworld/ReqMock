@@ -3697,8 +3697,6 @@ export default function App() {
 
               sending={curTab.sending}
 
-              error={curTab.response && !curTab.response.ok}
-
               varNames={varNames}
 
               varMap={buildVarMap(activeEnv, globals)}
