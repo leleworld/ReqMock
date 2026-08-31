@@ -1,6 +1,6 @@
 {
   "name": "reqmock",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "API debug client + mock server desktop tool",
   "main": "electron/main.cjs",
   "private": true,
@@ -40,11 +40,12 @@
         "repo": "ReqMock"
       }
     ],
-    "extraResources": [{
-      "from": "build/icons",
-      "to": "icons"
-    }],
-
+    "extraResources": [
+      {
+        "from": "build/icons",
+        "to": "icons"
+      }
+    ],
     "win": {
       "icon": "build/icon.png",
       "target": [
