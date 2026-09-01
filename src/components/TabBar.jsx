@@ -356,7 +356,13 @@ export default function TabBar({
         aria-label="向左滚动标签"
         onClick={() => scrollTabs(-1)}
       ><JbIcon name="chevron-left" size={14} /></button>
-      <div className="tab-list-wrap">
+      <div
+        className="tab-list-wrap"
+        onDoubleClick={(e) => {
+          if (e.target.closest('.tab-item') || e.target.closest('.tab-group')) return;
+          onNew();
+        }}
+      >
         {fadeL && <span className="tab-fade tab-fade-l" aria-hidden="true" />}
         <div className="tab-list" ref={listRef}>
           {pinnedItems}
