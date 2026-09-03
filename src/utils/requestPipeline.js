@@ -104,10 +104,11 @@ export async function executeRequest(reqSnapshot, ctx) {
     if (qIdx >= 0) {
       const base = finalReq.url.slice(0, qIdx);
       const query = finalReq.url.slice(qIdx + 1);
+      const safeDecode = (s) => { try { return decodeURIComponent(s); } catch (e) { return s; } };
       const encoded = query.split('&').map((pair) => {
         const eqIdx = pair.indexOf('=');
-        if (eqIdx < 0) return encodeURIComponent(pair);
-        return encodeURIComponent(decodeURIComponent(pair.slice(0, eqIdx))) + '=' + encodeURIComponent(decodeURIComponent(pair.slice(eqIdx + 1)));
+        if (eqIdx < 0) return encodeURIComponent(safeDecode(pair));
+        return encodeURIComponent(safeDecode(pair.slice(0, eqIdx))) + '=' + encodeURIComponent(safeDecode(pair.slice(eqIdx + 1)));
       }).join('&');
       finalReq = { ...finalReq, url: base + '?' + encoded };
     }

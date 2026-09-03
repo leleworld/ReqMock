@@ -1176,6 +1176,7 @@ export default function App() {
   const doSend = async (tabId, reqSnapshot) => {
 
     patchTab(tabId, { sending: true, response: null, scriptResult: null });
+    try {
 
 
 
@@ -1339,6 +1340,12 @@ export default function App() {
 
     }, ...prev].slice(0, 100));
 
+    } catch (err) {
+      // 确保任何异常都清除 sending 状态
+      sendTokensRef.current.delete(tabId);
+      patchTab(tabId, { sending: false, response: { ok: false, error: (err && err.message) || '请求执行异常', errorCode: 'EXEC_ERROR' } });
+      pushNotice(`请求异常：${err.message}`, 'error');
+    }
   };
 
 
