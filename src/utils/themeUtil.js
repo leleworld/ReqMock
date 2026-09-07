@@ -51,6 +51,12 @@ export const LAYOUTS = [
   { value: 'horizontal', label: '左右分栏' }
 ];
 
+/** 工作模式：classic = 经典（每条请求一条记录）；endpoint = 聚合（同 method+path 归一条，域名/参数为变体） */
+export const WORK_MODES = [
+  { value: 'classic', label: '经典' },
+  { value: 'endpoint', label: '聚合' }
+];
+
 /** 数值型设置项归一：非法值回退默认，并限制在合法区间内 */
 function clampNum(value, min, max, fallback) {
   const n = Number(value);
@@ -64,6 +70,7 @@ export function normalizeSettings(s) {
     theme: THEMES.some((t) => t.value === settings.theme) ? settings.theme : 'dark',
     accent: ACCENTS.some((a) => a.value === settings.accent) ? settings.accent : 'blue',
     layout: LAYOUTS.some((l) => l.value === settings.layout) ? settings.layout : 'vertical',
+    workMode: WORK_MODES.some((m) => m.value === settings.workMode) ? settings.workMode : 'classic',
     cookiesEnabled: settings.cookiesEnabled !== false,
     // 编辑器
     fontSize: clampNum(settings.fontSize, 12, 20, 14),

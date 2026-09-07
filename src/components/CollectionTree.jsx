@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { countRequests, findRequestAncestorIds } from '../utils/collectionUtil.js';
+import { aggregateNode, variantDiffLabel } from '../utils/endpointUtil.js';
 import { JbIcon } from './Icons.jsx';
 
 // 拖拽自定义 MIME：与文件拖入导入（Files）区分，仅树内移动响应
@@ -169,7 +170,10 @@ export default function CollectionTree(props) {
         </div>
       )}
       {!props.importing && q && collections.length > 0 && shown.length === 0 && <div className="empty-hint">无匹配结果</div>}
-      {!props.importing && shown.map((col) => (
+      {!props.importing && props.workMode === 'endpoint' && shown.map((col) => (
+        <EndpointCollectionNode key={col.id} {...props} collection={col} onContextMenu={handleContextMenu} />
+      ))}
+      {!props.importing && props.workMode !== 'endpoint' && shown.map((col) => (
         <CollectionNode key={col.id} {...props} collection={col} forceOpen={!!q} forceOpenIds={forceOpenIds} onContextMenu={handleContextMenu} />
       ))}
 
@@ -489,6 +493,182 @@ function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDelete
   );
 }
 
+/** 聚合模式（Endpoint Mode）：保留集合 > 文件夹层级，每个节点内部按 method+path 聚合直接请求。
+    存储不动，纯派生视图；组展开态 = 手动操作优先，激活组默认展开但可手动折叠。 */
+function EndpointCollectionNode(props) {
+  const { collection } = props;
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="tree-collection">
+      <div
+        className="tree-row tree-collection-row"
+        onClick={() => setOpen(!open)}
+        onContextMenu={(e) => props.onContextMenu && props.onContextMenu(e, 'collection', collection.id, collection.name, collection.id)}
+      >
+        <JbIcon name={open ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
+        <span className="item-name" title={collection.doc || collection.name}>{collection.name}</span>
+        <span className="tree-count" title={`${countRequests(collection)} 条请求 · ${deepGroupCount(collection)} 个接口`}>{countRequests(collection)}</span>
+        <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
+          <span className="tree-action" title="新建请求" onClick={() => props.onNewRequest && props.onNewRequest(collection.id)}><JbIcon name="add" size={14} /></span>
+          <span className="tree-action" title="设置" onClick={() => props.onCollectionSettings && props.onCollectionSettings(collection.id)}><JbIcon name="settings" size={14} /></span>
+          <span className="tree-action" title="导出该集合" onClick={() => props.onExportCollection && props.onExportCollection(collection.id)}><JbIcon name="export" size={14} /></span>
+          <span className="tree-action tree-action-danger" title="删除集合" onClick={() => props.onDeleteCollection && props.onDeleteCollection(collection.id)}><JbIcon name="trash" size={14} /></span>
+        </span>
+      </div>
+      {open && (
+        <div className="tree-children">
+          <EndpointNodeBody {...props} node={collection} depth={1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 聚合模式节点内容：子文件夹（递归）+ 本节点直接请求的聚合组；
+    组展开态：手动开/关（openKeys/closedKeys）优先于「激活组默认展开」 */
+function EndpointNodeBody(props) {
+  const { node, depth, activeRequestId, onOpenRequest, onDeleteRequest, onContextMenu } = props;
+  const folders = node.folders || [];
+  const groups = aggregateNode(node);
+  const shownGroups = filterGroups(groups, props.filter);
+  const [openKeys, setOpenKeys] = useState(() => new Set());
+  const [closedKeys, setClosedKeys] = useState(() => new Set());
+  const activeGroupKey = activeRequestId
+    ? ((shownGroups).find((g) => g.variants.some((r) => r.id === activeRequestId)) || {}).key
+    : null;
+  const isOpenKey = (key) =>
+    closedKeys.has(key) ? false : (openKeys.has(key) || key === activeGroupKey);
+  const toggleKey = (key) => {
+    const isOpen = isOpenKey(key);
+    setOpenKeys((prev) => { const n = new Set(prev); isOpen ? n.delete(key) : n.add(key); return n; });
+    setClosedKeys((prev) => { const n = new Set(prev); isOpen ? n.add(key) : n.delete(key); return n; });
+  };
+
+  return (
+    <>
+      {folders.map((f) => (
+        <EndpointFolderNode key={f.id} {...props} folder={f} depth={depth} />
+      ))}
+      {shownGroups.map((g) => (
+        <EndpointGroupRow
+          key={g.key}
+          group={g}
+          depth={depth}
+          open={isOpenKey(g.key)}
+          onToggle={() => toggleKey(g.key)}
+          activeRequestId={activeRequestId}
+          onOpenRequest={onOpenRequest}
+          onDeleteRequest={onDeleteRequest}
+          onContextMenu={onContextMenu}
+        />
+      ))}
+      {folders.length === 0 && shownGroups.length === 0 && (
+        <div className="empty-hint" style={{ paddingLeft: depth * 14 + 14 }}>空</div>
+      )}
+    </>
+  );
+}
+
+/** 聚合模式文件夹节点：结构同经典文件夹行（无拖拽），子内容为聚合组 */
+function EndpointFolderNode(props) {
+  const { folder, depth } = props;
+  const [open, setOpen] = useState(false);
+  const q = (props.filter || '').trim().toLowerCase();
+  const groups = aggregateNode(folder);
+  const shownGroups = filterGroups(groups, q);
+  const deepRequests = countRequests(folder);
+  const deepGroups = deepGroupCount(folder);
+
+  return (
+    <div className="tree-folder">
+      <div
+        className="tree-row tree-folder-row"
+        style={{ paddingLeft: depth * 14 }}
+        onClick={() => setOpen(!open)}
+        onContextMenu={(e) => props.onContextMenu && props.onContextMenu(e, 'folder', folder.id, folder.name, null)}
+      >
+        <JbIcon name={open ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
+        <span className="tree-folder-icon"><JbIcon name="folder" size={13} /></span>
+        <span className="item-name" title={folder.name}>{folder.name}</span>
+        <span className="tree-count" title={`${deepRequests} 条请求 · ${deepGroups} 个接口`}>{deepGroups}</span>
+        <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
+          <span className="tree-action" title="新建请求" onClick={() => props.onNewRequest && props.onNewRequest(folder.id)}><JbIcon name="add" size={14} /></span>
+          <span className="tree-action" title="新建子文件夹" onClick={() => props.onAddFolder && props.onAddFolder(folder.id)}><JbIcon name="add" size={14} /></span>
+          <span className="tree-action tree-action-danger" title="删除文件夹" onClick={() => props.onDeleteFolder && props.onDeleteFolder(folder.id)}><JbIcon name="trash" size={14} /></span>
+        </span>
+      </div>
+      {open && (
+        <div className="tree-children">
+          <EndpointNodeBody {...props} node={folder} depth={depth + 1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 按关键字过滤聚合组：命中 path/key/变体名称/URL 任意即保留整组 */
+function filterGroups(groups, filter) {
+  const q = (filter || '').trim().toLowerCase();
+  if (!q) return groups;
+  return groups.filter((g) =>
+    g.key.toLowerCase().includes(q) ||
+    g.path.toLowerCase().includes(q) ||
+    g.variants.some((r) =>
+      (r.name || '').toLowerCase().includes(q) ||
+      (r.url || '').toLowerCase().includes(q)
+    )
+  );
+}
+
+/** 递归统计节点下（含子文件夹）聚合组总数 */
+function deepGroupCount(node) {
+  const direct = aggregateNode(node).length;
+  return direct + (node.folders || []).reduce((sum, f) => sum + deepGroupCount(f), 0);
+}
+
+/** 聚合组行 + 变体行：组行显示 method + path（徽标为变体数），
+    展开后逐个变体，标签为参数差异（忽略组内公共同值参数，悬浮看全量） */
+function EndpointGroupRow({ group, open, onToggle, activeRequestId, onOpenRequest, onDeleteRequest, onContextMenu, depth = 1 }) {
+  const active = group.variants.some((r) => r.id === activeRequestId);
+  return (
+    <>
+      <div
+        className={`tree-row tree-endpoint-row${active ? ' selected' : ''}`}
+        style={{ paddingLeft: depth * 14 + 2 }}
+        onClick={onToggle}
+      >
+        <JbIcon name={open ? 'chevron-down' : 'chevron-right'} size={12} className="tree-arrow" />
+        <span className={`method method-${group.method}`}>{group.method}</span>
+        <span className="item-name tree-endpoint-path" title={group.path}>{group.path || '/'}</span>
+        {group.variants.length > 1 && <span className="endpoint-badge">{group.variants.length} 变体</span>}
+      </div>
+      {open && group.variants.map((r) => {
+        const label = variantDiffLabel(r, group.variants);
+        return (
+          <div
+            key={r.id}
+            data-request-id={r.id}
+            className={`tree-row tree-request tree-variant-row${r.id === activeRequestId ? ' selected' : ''}`}
+            style={{ paddingLeft: depth * 14 + 30 }}
+            onClick={() => onOpenRequest && onOpenRequest(r)}
+            onContextMenu={(e) => onContextMenu && onContextMenu(e, 'request', r.id, r.name, null)}
+          >
+            <span className="endpoint-variant-dot" />
+            <span className="item-name" title={`${label}\n${r.name ? r.name + ' · ' : ''}${r.url}`}>{label}</span>
+            <span className="tree-actions">
+              <span
+                className="tree-action tree-action-danger"
+                title="删除请求"
+                onClick={(e) => { e.stopPropagation(); onDeleteRequest && onDeleteRequest(r.id); }}
+              ><JbIcon name="trash" size={12} /></span>
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 /** 右键上下文菜单组件 */
 function ContextMenu({ ctxMenu, onAction, onClose }) {
   const { x, y, nodeType } = ctxMenu;

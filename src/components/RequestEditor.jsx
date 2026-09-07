@@ -19,7 +19,7 @@ import { ParamPresetsModal } from './Modals.jsx';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
 /** 页签顺序：切换时据目标位置决定抽拉方向（Body 紧随 Params，高频页签前置） */
-const TAB_ORDER = ['params', 'body', 'headers', 'auth', 'script', 'settings', 'doc', 'examples'];
+const TAB_ORDER = ['params', 'body', 'headers', 'history', 'auth', 'script', 'settings', 'doc', 'examples'];
 /** 常驻页签：无论容器多窄都不收进「更多」菜单、不让位给当前页签 */
 const PINNED_TABS = ['params', 'body', 'headers'];
 
@@ -320,7 +320,7 @@ export function RequestBar({ request, sending, error, varNames = [], varMap = nu
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets, fontSize, tabSize, wordWrap, showLineNumbers }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets, fontSize, tabSize, wordWrap, showLineNumbers, workMode = 'classic', variants = [], activeRequestId = null, onSwitchVariant, onSaveVariant, requestHistory = [], onApplyHistoryVariant }) {
   // 当前活动页签
   const [tab, setTabRaw] = useState('params');
   const [tabDir, setTabDir] = useState(1); // 滑动方向：目标页签在右侧为 1，左侧为 -1
@@ -604,6 +604,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
     ['params', 'Params', request.params.filter((p) => p.key).length, false, true],
     ['body', 'Body', 0, request.bodyType !== 'none', false],
     ['headers', 'Headers', request.headers.filter((h) => h.key).length, false, true],
+    ['history', '历史', requestHistory.length, false, true],
     ['auth', '授权', 0, auth.type !== 'none', false],
     ['script', '脚本', 0, !!(request.preScript || request.postScript), false],
     ['settings', '设置', 0, settingsCount > 0, false],
@@ -752,6 +753,12 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
             label="请求头列表"
             lockedRows={lockedHeaderRows}
             toolbarExtra={presetsBtn}
+          />
+        )}
+        {tab === 'history' && (
+          <EditorHistoryPane
+            items={requestHistory}
+            onApply={onApplyHistoryVariant}
           />
         )}
         {tab === 'auth' && (
@@ -1308,6 +1315,68 @@ function MultipartEditor({ rows, onChange }) {
       <button className="btn-text" onClick={() => onChange([...rows, { key: '', value: '', type: 'text', filePath: '', enabled: true }])}>
         + 添加字段
       </button>
+    </div>
+  );
+}
+
+/** 编辑器内「历史」页签：仅列当前接口（同 method+path）的最近请求，
+    支持展开回看响应快照、一键应用为变体 */
+function EditorHistoryPane({ items, onApply }) {
+  const [expandedId, setExpandedId] = useState(null);
+  if (!items || items.length === 0) {
+    return <div className="empty-hint">该接口暂无发送记录；发送请求后自动记录在这里</div>;
+  }
+  const hostOf = (url) => {
+    const m = String(url || '').match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^/?#\s]+)/);
+    return m ? m[1] : '';
+  };
+  const queryOf = (url) => {
+    const i = String(url || '').indexOf('?');
+    return i >= 0 ? url.slice(i + 1) : '';
+  };
+  const fmtTime = (t) => {
+    const d = new Date(t);
+    if (isNaN(d)) return '';
+    const today = new Date().toDateString();
+    const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    return d.toDateString() === today ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  };
+  return (
+    <div className="editor-history">
+      {items.map((item) => {
+        const bad = item.status === 'ERR' || (typeof item.status === 'number' && item.status >= 400);
+        const expanded = expandedId === item.id;
+        const snap = item.responseSnapshot;
+        return (
+          <div key={item.id} className={`editor-history-row${expanded ? ' expanded' : ''}`}>
+            <div className="editor-history-main" onClick={() => setExpandedId(expanded ? null : item.id)}>
+              <span className="editor-history-time">{fmtTime(item.time)}</span>
+              <span className="editor-history-host" title={hostOf(item.url)}>{hostOf(item.url) || '（变量地址）'}</span>
+              <span className="editor-history-query" title={queryOf(item.url)}>{queryOf(item.url) ? `?${queryOf(item.url)}` : '（无参数）'}</span>
+              <span className={`status-tag ${bad ? 'status-bad' : 'status-good'}`}>{item.status}</span>
+              {item.timeMs != null && <span className="editor-history-ms">{item.timeMs}ms</span>}
+            </div>
+            <div className="editor-history-actions">
+              {snap && (
+                <button className="btn-text" onClick={() => setExpandedId(expanded ? null : item.id)}>查看响应</button>
+              )}
+              <button
+                className="btn-text editor-history-apply"
+                title="把当时的域名/参数组合存为该接口的变体"
+                onClick={() => onApply && onApply(item)}
+              >应用为变体</button>
+            </div>
+            {expanded && snap && (
+              <div className="editor-history-snap">
+                <div className="editor-history-snap-head">
+                  {snap.status} {snap.statusText || ''} · {snap.sizeBytes != null ? `${(snap.sizeBytes / 1024).toFixed(1)}KB` : ''}{snap.bodyTruncated ? ' · 已截断' : ''}
+                </div>
+                <pre className="editor-history-snap-body">{snap.body || '（空响应体）'}</pre>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

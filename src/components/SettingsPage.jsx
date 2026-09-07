@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { JbIcon } from './Icons.jsx';
 import { maskFade, modalPop } from '../utils/motionPresets.js';
-import { THEMES, ACCENTS, LAYOUTS, resolveTheme } from '../utils/themeUtil.js';
+import { THEMES, ACCENTS, LAYOUTS, WORK_MODES, resolveTheme } from '../utils/themeUtil.js';
 
 /**
  * 全页设置面板 — Hoppscotch 风格
@@ -103,6 +103,22 @@ export default function SettingsPage({ settings, onChange, onBackup, onRestore, 
                 >
                   {LAYOUTS.map((l) => (
                     <option key={l.value} value={l.value}>{l.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sp-item sp-item-row">
+                <div>
+                  <span className="sp-item-title">工作模式</span>
+                  <span className="sp-item-desc">经典：每条请求一条记录；聚合：相同 method+路径 的接口归为一条，不同域名/参数组合收纳为「变体」</span>
+                </div>
+                <select
+                  className="sp-select"
+                  value={settings.workMode || 'classic'}
+                  onChange={(e) => onChange({ workMode: e.target.value })}
+                >
+                  {WORK_MODES.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
               </div>

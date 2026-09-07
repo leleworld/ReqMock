@@ -11,6 +11,11 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('no-sandbox');
 
+// dev 实例使用独立 userData：避免与已安装的正式版共用 reqmock-store.json 互相覆盖
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'ReqMock-dev'));
+}
+
 // GPU 加速自适应：检测上次是否因 GPU 崩溃退出，是则本次禁用 GPU
 const gpuCrashFlag = path.join(app.getPath('userData'), '.gpu-crash');
 if (fs.existsSync(gpuCrashFlag)) {

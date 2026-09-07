@@ -66,6 +66,8 @@ import {
 
 } from './utils/collectionUtil.js';
 
+import { uriKey, findVariantGroup, variantLabel } from './utils/endpointUtil.js';
+
 import { newEnvironment, buildVarMap, resolveRequest, mergeVariables } from './utils/envUtil.js';
 
 import { applyAutoGroups, pickGroupColor, reorderTabsByGroup } from './utils/tabGroupUtil.js';
@@ -1340,6 +1342,22 @@ export default function App() {
 
     }, ...prev].slice(0, 100));
 
+    // 聚合模式：发送尚未保存的请求时，若集合中已有同键（method+path）接口，则自动落为新变体
+    if (settings.workMode === 'endpoint') {
+      const alreadySaved = findRequestById(collections, reqSnapshot.id);
+      if (!alreadySaved) {
+        const group = findVariantGroup(collections, reqSnapshot);
+        if (group) {
+          const req = { ...reqSnapshot, variantName: variantLabel(reqSnapshot) };
+          setCollections((prev) => updateNode(prev, group.node.id, (node) => ({
+            ...node,
+            requests: [...(node.requests || []), req]
+          })));
+          pushNotice(`聚合模式：已自动存为变体「${variantLabel(reqSnapshot)}」`, 'success');
+        }
+      }
+    }
+
     } catch (err) {
       // 确保任何异常都清除 sending 状态
       sendTokensRef.current.delete(tabId);
@@ -1478,6 +1496,68 @@ export default function App() {
 
     showToast('已保存到集合', 'success');
 
+  };
+
+
+
+  // ---- 聚合模式（Endpoint Mode）：变体切换 / 存为变体 / 历史应用 ----
+
+  // 当前接口的同键成员（纯派生，不落库）；空数组 = 尚无同键接口
+  const activeVariants = settings.workMode === 'endpoint' && activeRequest
+    ? ((findVariantGroup(collections, activeRequest) || {}).members || [])
+    : [];
+
+  // 当前接口的最近发送记录（同 method+path），供「历史」页签
+  const editorHistory = settings.workMode === 'endpoint' && activeRequest
+    ? history.filter((h) => uriKey(h) === uriKey(activeRequest)).slice(0, 20)
+    : [];
+
+  /** 切换变体：目标已在某标签打开则聚焦；当前标签干净且已保存则原位替换，否则新开标签 */
+  const handleSwitchVariant = (v) => {
+    if (!v || (activeRequest && v.id === activeRequest.id)) return;
+    const existing = tabs.find((t) => t.kind === 'request' && t.request.id === v.id);
+    if (existing) { setActiveTabId(existing.id); return; }
+    const curSaved = activeRequest && !!findRequestById(collections, activeRequest.id);
+    if (curTab.kind === 'request' && curSaved && !isTabDirty(curTab)) {
+      patchTab(curTab.id, { request: normalizeOpenedRequest(normalizeRequest(v)), response: null, scriptResult: null });
+    } else {
+      handleOpenRequest(v);
+    }
+  };
+
+  /** 存为变体：当前内容克隆为新记录（新 id）落入同键组所在节点；无同键组时走常规保存弹窗 */
+  const handleSaveVariant = () => {
+    if (!activeRequest) return;
+    const group = findVariantGroup(collections, activeRequest);
+    if (!group) { setModal({ type: 'save' }); return; }
+    const base = group.members.find((m) => m.id === activeRequest.id) || group.members[0];
+    const req = normalizeRequest({
+      ...activeRequest,
+      id: uuid(),
+      name: base.name || activeRequest.name || '',
+      variantName: variantLabel(activeRequest)
+    });
+    setCollections((prev) => updateNode(prev, group.node.id, (node) => ({
+      ...node,
+      requests: [...(node.requests || []), req]
+    })));
+    showToast(`已存为变体「${variantLabel(req)}」`, 'success');
+  };
+
+  /** 历史条目「应用为变体」：按当时的请求快照克隆新记录入组并打开 */
+  const handleApplyHistoryVariant = (item) => {
+    if (!activeRequest || !item) return;
+    const { responseSnapshot, requestId, time, status, timeMs, sizeBytes, ...rest } = item;
+    const req = normalizeRequest({ ...rest, id: uuid(), variantName: variantLabel(rest) });
+    const group = findVariantGroup(collections, activeRequest);
+    if (group) {
+      setCollections((prev) => updateNode(prev, group.node.id, (node) => ({
+        ...node,
+        requests: [...(node.requests || []), req]
+      })));
+    }
+    handleOpenRequest(req);
+    showToast(group ? `已应用为变体「${variantLabel(req)}」` : '已打开请求（未入集合）', 'success');
   };
 
 
@@ -3498,6 +3578,8 @@ export default function App() {
 
         globals={globals}
 
+        workMode={settings.workMode}
+
         activeRequestId={activeRequest ? activeRequest.id : null}
 
         onToast={showToast}
@@ -3767,6 +3849,20 @@ export default function App() {
                     paramPresets={settings.paramPresets}
 
                     onChangeParamPresets={(p) => handleChangeSettings({ paramPresets: p })}
+
+                    workMode={settings.workMode}
+
+                    variants={activeVariants}
+
+                    activeRequestId={activeRequest ? activeRequest.id : null}
+
+                    onSwitchVariant={handleSwitchVariant}
+
+                    onSaveVariant={handleSaveVariant}
+
+                    requestHistory={editorHistory}
+
+                    onApplyHistoryVariant={handleApplyHistoryVariant}
 
                   />
 

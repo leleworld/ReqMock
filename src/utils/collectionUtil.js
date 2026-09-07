@@ -43,6 +43,8 @@ export function normalizeRequest(req) {
     omitEmptyEq: !!req.omitEmptyEq,
     cookieJarMode: req.cookieJarMode || 'default',
     injectId: !!req.injectId,
+    // 聚合模式变体名（可选；缺省由 host+query 自动生成展示名）
+    variantName: req.variantName || '',
     // 示例响应：[{id, name, status, contentType, headers, body, savedAt}]
     examples: req.examples || []
   };
