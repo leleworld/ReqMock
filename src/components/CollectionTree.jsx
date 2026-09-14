@@ -58,11 +58,19 @@ export default function CollectionTree(props) {
       ids.forEach((id) => next.add(id));
       return next;
     });
-    // 等展开与（可能的）清空过滤重渲染落地后再滚动
-    const timer = setTimeout(() => {
+    // 目标行要等父级展开（经典模式）或聚合组重开之后才会渲染出来，
+    // 所以找不到行就重试几次，避免刚展开面板/刚切到集合面板时定位落空
+    let cancelled = false;
+    let timer = null;
+    let tries = 0;
+    const locate = () => {
+      if (cancelled) return;
       const row = document.querySelector(`.tree-request[data-request-id="${reqId}"]`);
-      const box = row && row.closest('.side-panel-body');
-      if (!row) return;
+      if (!row) {
+        if (tries++ < 6) timer = setTimeout(locate, 80);
+        return;
+      }
+      const box = row.closest('.side-panel-body');
       if (box) {
         const rr = row.getBoundingClientRect();
         const rb = box.getBoundingClientRect();
@@ -71,8 +79,9 @@ export default function CollectionTree(props) {
       }
       row.classList.add('tree-reveal');
       setTimeout(() => row.classList.remove('tree-reveal'), 1200);
-    }, 60);
-    return () => clearTimeout(timer);
+    };
+    timer = setTimeout(locate, 60);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [revealTick]);
 
   // ===== 右键上下文菜单状态 =====
@@ -496,8 +505,13 @@ function RequestRow({ req, node, depth, activeRequestId, onOpenRequest, onDelete
 /** 聚合模式（Endpoint Mode）：保留集合 > 文件夹层级，每个节点内部按 method+path 聚合直接请求。
     存储不动，纯派生视图；组展开态 = 手动操作优先，激活组默认展开但可手动折叠。 */
 function EndpointCollectionNode(props) {
-  const { collection } = props;
+  const { collection, forceOpenIds } = props;
   const [open, setOpen] = useState(true);
+
+  // 定位时把本集合自身展开态打开（一次性），之后仍可正常手动折叠
+  useEffect(() => {
+    if (forceOpenIds && forceOpenIds.has(collection.id)) setOpen(true);
+  }, [forceOpenIds]);
 
   return (
     <div className="tree-collection">
@@ -537,6 +551,25 @@ function EndpointNodeBody(props) {
   const activeGroupKey = activeRequestId
     ? ((shownGroups).find((g) => g.variants.some((r) => r.id === activeRequestId)) || {}).key
     : null;
+
+  // 定位当前请求时：若它所在的分组此前被手动收起过，重新展开
+  // （组收起时变体行根本不渲染，定位会找不到目标行）
+  const revealTick = (props.reveal && props.reveal.tick) || 0;
+  const revealReqId = props.reveal && props.reveal.reqId;
+  useEffect(() => {
+    if (!revealTick || !revealReqId) return;
+    const hit = shownGroups.find((g) => g.variants.some((r) => r.id === revealReqId));
+    if (!hit) return;
+    setClosedKeys((prev) => {
+      if (!prev.has(hit.key)) return prev;
+      const n = new Set(prev); n.delete(hit.key); return n;
+    });
+    setOpenKeys((prev) => {
+      if (prev.has(hit.key)) return prev;
+      const n = new Set(prev); n.add(hit.key); return n;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealTick]);
   const isOpenKey = (key) =>
     closedKeys.has(key) ? false : (openKeys.has(key) || key === activeGroupKey);
   const toggleKey = (key) => {
@@ -572,13 +605,18 @@ function EndpointNodeBody(props) {
 
 /** 聚合模式文件夹节点：结构同经典文件夹行（无拖拽），子内容为聚合组 */
 function EndpointFolderNode(props) {
-  const { folder, depth } = props;
+  const { folder, depth, forceOpenIds } = props;
   const [open, setOpen] = useState(false);
   const q = (props.filter || '').trim().toLowerCase();
   const groups = aggregateNode(folder);
   const shownGroups = filterGroups(groups, q);
   const deepRequests = countRequests(folder);
   const deepGroups = deepGroupCount(folder);
+
+  // 定位时把本文件夹自身展开态打开（一次性），之后仍可正常手动折叠
+  useEffect(() => {
+    if (forceOpenIds && forceOpenIds.has(folder.id)) setOpen(true);
+  }, [forceOpenIds]);
 
   return (
     <div className="tree-folder">

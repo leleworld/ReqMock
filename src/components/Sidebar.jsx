@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { badgeSpring, paneSlide } from '../utils/motionPresets.js';
 import CollectionTree from './CollectionTree.jsx';
-import { findRequestAncestorIds } from '../utils/collectionUtil.js';
  import { TOOLS } from './ToolsPanel.jsx';
 import { JbIcon } from './Icons.jsx';
 
@@ -34,27 +33,20 @@ export default function Sidebar(props) {
     onOpenCookies, onOpenTool,
     onOpenHistory, onDeleteHistory, onClearHistory, onCopyHistoryCurl,
     settings, onChangeSettings, onOpenSettings,
-    noticeUnread, onToggleNotices
+    noticeUnread, onToggleNotices,
+    reveal, onRevealRequest
   } = props;
 
   // 集合树搜索关键字 + 环境面板拖拽高亮状态
   const [colFilter, setColFilter] = useState('');
   const [envDragOver, setEnvDragOver] = useState(false);
-  // 「在集合中定位当前请求」：tick 递增一次即触发一次定位（同一请求重复点击也要生效）
-  const [reveal, setReveal] = useState({ reqId: null, tick: 0 });
-  const handleRevealRequest = () => {
-    if (!activeRequestId) {
-      if (onToast) onToast('当前标签不是请求，无法在集合中定位', 'warn');
-      return;
-    }
-    if (!findRequestAncestorIds(collections, activeRequestId)) {
-      if (onToast) onToast('该请求尚未保存到集合（Ctrl+S 保存后可定位）', 'warn');
-      return;
-    }
-    // 搜索过滤会隐藏目标行，定位前先清空
-    if (colFilter.trim()) setColFilter('');
-    setReveal((r) => ({ reqId: activeRequestId, tick: r.tick + 1 }));
-  };
+  // 「在集合中定位当前请求」的定位信号由 App 统一发出（右侧工具条与集合面板标题栏共用同一入口），
+  // 这里只负责收尾：搜索过滤会隐藏目标行，定位前先清空它。
+  const revealTick = (reveal && reveal.tick) || 0;
+  useEffect(() => {
+    if (revealTick && colFilter.trim()) setColFilter('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealTick]);
   // 侧栏宽度拖拽中：拖拽时关闭宽度过渡动画，保证手柄跟手
   const [resizing, setResizing] = useState(false);
   const sbWidth = settings.sidebarWidth || 264;
@@ -160,7 +152,7 @@ export default function Sidebar(props) {
             {/* 集合面板操作区：定位当前请求 / 新建请求 / 新建集合 / 导入 / 导出以图标按钮内联到标题栏 */}
             {activity === 'collections' && (
               <span className="panel-actions">
-                <button className="panel-action" title="在集合中定位当前请求" onClick={handleRevealRequest}><JbIcon name="locate" size={14} /></button>
+                <button className="panel-action" title="在集合中定位当前请求" onClick={onRevealRequest}><JbIcon name="locate" size={14} /></button>
                 <button className="panel-action" title="新建请求" onClick={onNewRequest}><JbIcon name="add" size={14} /></button>
                 <button className="panel-action" title="新建集合" onClick={onNewCollection}><JbIcon name="folder" size={14} /></button>
                 <button className="panel-action" title="从 JSON 文件导入（支持 ReqMock / Reqable / Postman / Hoppscotch / OpenAPI / Insomnia / HAR）" onClick={onImport}><JbIcon name="import" size={14} /></button>

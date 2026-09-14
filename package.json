@@ -1,15 +1,16 @@
 {
   "name": "reqmock",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "API debug client + mock server desktop tool",
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron . --no-sandbox --disable-gpu\"",
     "check:css": "node tools/check-css-tokens.mjs",
-    "build": "npm run check:css && vite build",
+    "check:wireup": "node tools/check-wireup.mjs",
+    "build": "npm run check:css && npm run check:wireup && vite build",
     "start": "npm run build && electron .",
-    "dist": "npm run check:css && vite build && electron-builder --win"
+    "dist": "npm run check:css && npm run check:wireup && vite build && electron-builder --win"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

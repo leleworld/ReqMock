@@ -13,6 +13,8 @@ import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildV
 import { resolveVars } from '../utils/envUtil.js';
 import { applyPresetToHeaders } from '../utils/headerPresets.js';
 import { applyPresetToParams } from '../utils/paramPresets.js';
+import { SCRIPT_TEMPLATES } from '../utils/scriptTemplates.js';
+import { diffRequests, describeChange, changeLabel, shortenValue } from '../utils/requestDelta.js';
 
 import { HeaderPresetsModal } from './Modals.jsx';
 import { ParamPresetsModal } from './Modals.jsx';
@@ -320,7 +322,7 @@ export function RequestBar({ request, sending, error, varNames = [], varMap = nu
  * URL 中的 query 与 Params 表格双向自动同步；form 类型 Body 以键值表格编辑；
  * multipart 支持文件上传；值输入支持 {{变量}} 自动补全
  */
-export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets, fontSize, tabSize, wordWrap, showLineNumbers, workMode = 'classic', variants = [], activeRequestId = null, onSwitchVariant, onSaveVariant, requestHistory = [], onApplyHistoryVariant }) {
+export default function RequestEditor({ request, varNames = [], varMap = {}, ownerCollection = null, onChange, onExampleToMock, headerPresets = [], onChangeHeaderPresets, paramPresets = [], onChangeParamPresets, fontSize, tabSize, wordWrap, showLineNumbers, workMode = 'classic', variants = [], activeRequestId = null, onSwitchVariant, onSaveVariant, requestHistory = [] }) {
   // 当前活动页签
   const [tab, setTabRaw] = useState('params');
   const [tabDir, setTabDir] = useState(1); // 滑动方向：目标页签在右侧为 1，左侧为 -1
@@ -758,7 +760,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
         {tab === 'history' && (
           <EditorHistoryPane
             items={requestHistory}
-            onApply={onApplyHistoryVariant}
+            workMode={workMode}
           />
         )}
         {tab === 'auth' && (
@@ -1319,20 +1321,24 @@ function MultipartEditor({ rows, onChange }) {
   );
 }
 
-/** 编辑器内「历史」页签：仅列当前接口（同 method+path）的最近请求，
-    支持展开回看响应快照、一键应用为变体 */
-function EditorHistoryPane({ items, onApply }) {
+/** 编辑器内「历史」页签：当前标签的发送流水。
+ *  作用域随工作模式变化（见 endpointUtil.historyMatches）：
+ *  聚合模式 = 同接口（method+path）的所有变体发送；经典模式 = 这条请求记录自己的发送。
+ *  每条自动算出「相对上一条改了什么」（参数级改动，见 requestDelta），
+ *  点击整行展开看完整改动明细、实际地址与响应快照。 */
+function EditorHistoryPane({ items, workMode = 'classic' }) {
   const [expandedId, setExpandedId] = useState(null);
+  const endpointMode = workMode === 'endpoint';
   if (!items || items.length === 0) {
-    return <div className="empty-hint">该接口暂无发送记录；发送请求后自动记录在这里</div>;
+    return (
+      <div className="empty-hint">
+        {endpointMode ? '该接口暂无发送记录' : '该请求暂无发送记录'}；发送请求后自动记录在这里
+      </div>
+    );
   }
   const hostOf = (url) => {
     const m = String(url || '').match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^/?#\s]+)/);
     return m ? m[1] : '';
-  };
-  const queryOf = (url) => {
-    const i = String(url || '').indexOf('?');
-    return i >= 0 ? url.slice(i + 1) : '';
   };
   const fmtTime = (t) => {
     const d = new Date(t);
@@ -1343,36 +1349,101 @@ function EditorHistoryPane({ items, onApply }) {
   };
   return (
     <div className="editor-history">
-      {items.map((item) => {
+      <div className="editor-history-scope">
+        {endpointMode
+          ? `同一接口（method + 路径）的发送流水 · 最近 ${items.length} 条`
+          : `这条请求的发送流水 · 最近 ${items.length} 条`}
+        <span className="editor-history-scope-hint">
+          {endpointMode ? '不同域名/参数组合即变体' : '改 URL、改参数都算同一次调查'}
+        </span>
+      </div>
+      {items.map((item, i) => {
         const bad = item.status === 'ERR' || (typeof item.status === 'number' && item.status >= 400);
         const expanded = expandedId === item.id;
         const snap = item.responseSnapshot;
+        // 列表按时间倒序：上一条 = 索引 +1。改动由工具算，不靠回忆
+        const prev = items[i + 1] || null;
+        const changes = prev ? diffRequests(prev, item).changes : [];
+        const shown = changes.slice(0, 2).map((c) => describeChange(c));
         return (
           <div key={item.id} className={`editor-history-row${expanded ? ' expanded' : ''}`}>
-            <div className="editor-history-main" onClick={() => setExpandedId(expanded ? null : item.id)}>
+            <div
+              className="editor-history-main"
+              title={`${item.url || ''}\n第 ${items.length - i} 次发送记录 · 点击展开响应与改动明细`}
+              onClick={() => setExpandedId(expanded ? null : item.id)}
+            >
+              <span className="editor-history-idx">{items.length - i}</span>
               <span className="editor-history-time">{fmtTime(item.time)}</span>
-              <span className="editor-history-host" title={hostOf(item.url)}>{hostOf(item.url) || '（变量地址）'}</span>
-              <span className="editor-history-query" title={queryOf(item.url)}>{queryOf(item.url) ? `?${queryOf(item.url)}` : '（无参数）'}</span>
               <span className={`status-tag ${bad ? 'status-bad' : 'status-good'}`}>{item.status}</span>
               {item.timeMs != null && <span className="editor-history-ms">{item.timeMs}ms</span>}
+              <span className="editor-history-delta">
+                {!prev && <span className="editor-history-origin">起点 · {hostOf(item.url) || '首次记录'}</span>}
+                {prev && changes.length === 0 && <span className="editor-history-none">无参数改动（重复发送）</span>}
+                {prev && shown.map((c, ci) => (
+                  <React.Fragment key={c.key}>
+                    {ci > 0 && <span className="editor-history-sep">·</span>}
+                    <span className="editor-history-change">
+                      <span className="eh-k">{c.label}</span>
+                      <span className="eh-from">{c.from}</span>
+                      <span className="editor-history-arrow">→</span>
+                      <span className="eh-to">{c.to}</span>
+                    </span>
+                  </React.Fragment>
+                ))}
+                {changes.length > 2 && <span className="editor-history-sep">等 {changes.length} 处</span>}
+              </span>
+              <JbIcon name="chevron-right" size={13} className="editor-history-caret" />
             </div>
-            <div className="editor-history-actions">
-              {snap && (
-                <button className="btn-text" onClick={() => setExpandedId(expanded ? null : item.id)}>查看响应</button>
-              )}
-              <button
-                className="btn-text editor-history-apply"
-                title="把当时的域名/参数组合存为该接口的变体"
-                onClick={() => onApply && onApply(item)}
-              >应用为变体</button>
-            </div>
-            {expanded && snap && (
-              <div className="editor-history-snap">
-                <div className="editor-history-snap-head">
-                  {snap.status} {snap.statusText || ''} · {snap.sizeBytes != null ? `${(snap.sizeBytes / 1024).toFixed(1)}KB` : ''}{snap.bodyTruncated ? ' · 已截断' : ''}
-                </div>
-                <pre className="editor-history-snap-body">{snap.body || '（空响应体）'}</pre>
-              </div>
+            {expanded && (
+              <>
+                {item.url && <div className="editor-history-url">{item.url}</div>}
+                {prev && (
+                  <div className="editor-history-section">
+                    <div className="editor-history-section-head">
+                      {changes.length
+                        ? `相对 ${fmtTime(prev.time)} 的改动（${changes.length} 处）`
+                        : `与 ${fmtTime(prev.time)} 完全一致`}
+                    </div>
+                    {changes.length > 0 && (
+                      <div className="editor-history-changes">
+                        {changes.map((c) => (
+                          <React.Fragment key={c.key}>
+                            {c.kind === 'mod' && (
+                              <div className="eh-line del">
+                                <span className="eh-sign">−</span>
+                                <span className="eh-name">{changeLabel(c.key)}</span>
+                                <span>{shortenValue(c.prev, 160)}</span>
+                              </div>
+                            )}
+                            {c.kind !== 'del' && (
+                              <div className="eh-line add">
+                                <span className="eh-sign">+</span>
+                                <span className="eh-name">{changeLabel(c.key)}</span>
+                                <span>{shortenValue(c.next, 160)}{c.kind === 'add' ? '（新增）' : ''}</span>
+                              </div>
+                            )}
+                            {c.kind === 'del' && (
+                              <div className="eh-line del">
+                                <span className="eh-sign">−</span>
+                                <span className="eh-name">{changeLabel(c.key)}</span>
+                                <span>{shortenValue(c.prev, 160)}（已移除）</span>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {snap && (
+                  <div className="editor-history-snap">
+                    <div className="editor-history-snap-head">
+                      {snap.status} {snap.statusText || ''} · {snap.sizeBytes != null ? `${(snap.sizeBytes / 1024).toFixed(1)}KB` : ''}{snap.bodyTruncated ? ' · 已截断' : ''}
+                    </div>
+                    <pre className="editor-history-snap-body">{snap.body || '（空响应体）'}</pre>
+                  </div>
+                )}
+              </>
             )}
           </div>
         );

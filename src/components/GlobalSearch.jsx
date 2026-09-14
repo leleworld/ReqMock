@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { buildRequestIndex, searchRequests } from '../utils/requestSearch.js';
 
 /**
  * 全局搜索面板（Ctrl+Shift+F）：
  * 搜索所有集合中的 URL、请求名称、Header 值、参数值。
  * 结果列表显示请求名称、方法、URL、所属集合路径。
  * 点击结果跳转打开对应请求标签。
+ *
+ * 索引与匹配逻辑抽在 utils/requestSearch.js，与顶栏内嵌搜索框共用。
  */
 export default function GlobalSearch({ collections, onClose, onOpenRequest }) {
   const [query, setQuery] = useState('');
@@ -16,42 +19,12 @@ export default function GlobalSearch({ collections, onClose, onOpenRequest }) {
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
 
   // ---- 建立可搜索索引：遍历所有集合中的请求节点 ----
-  const index = useMemo(() => {
-    const items = [];
-    const walk = (node, path) => {
-      const cur = [...path, node.name];
-      for (const r of node.requests || []) {
-        // 收集搜索文本：name, url, params, headers
-        const searchTexts = [
-          r.name || '',
-          r.url || '',
-          ...(r.params || []).map((p) => `${p.key || ''} ${p.value || ''}`),
-          ...(r.headers || []).map((h) => `${h.key || ''} ${h.value || ''}`)
-        ].join(' ').toLowerCase();
-        items.push({
-          request: r,
-          name: r.name || r.url || '未命名请求',
-          method: r.method || 'GET',
-          url: r.url || '',
-          path: cur.join(' › '),
-          searchTexts
-        });
-      }
-      for (const f of node.folders || []) walk(f, cur);
-    };
-    for (const c of collections) walk(c, []);
-    return items;
-  }, [collections]);
+  const index = useMemo(() => buildRequestIndex(collections), [collections]);
 
   const q = query.trim().toLowerCase();
 
   // ---- 搜索匹配 ----
-  const results = useMemo(() => {
-    if (!q) return [];
-    return index
-      .filter((item) => item.searchTexts.includes(q))
-      .slice(0, 50);
-  }, [index, q]);
+  const results = useMemo(() => searchRequests(index, query, 50), [index, query]);
 
   useEffect(() => { setCursor(0); }, [q]);
 

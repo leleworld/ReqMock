@@ -1,14 +1,151 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { popoverRise } from '../utils/motionPresets.js';
 import { JbIcon } from './Icons.jsx';
 import { TOOLS } from './ToolsPanel.jsx';
+import { buildRequestIndex, searchRequests } from '../utils/requestSearch.js';
 
 /**
- * 顶部集成菜单栏（软件壳）：Logo + 应用菜单（文件/编辑/视图/工具/帮助）+ 右侧快捷动作（＋新建 / 环境切换器）
+ * 顶部集成菜单栏（软件壳）：Logo + 应用菜单（文件/编辑/视图/工具/帮助）+ 搜索框 + 右侧快捷动作（＋新建 / 环境切换器）
  * 菜单即功能索引：所有核心动作都能从菜单发现，快捷键以 kbd 提示展示
  * 编辑菜单经主进程 webContents 执行，保证与系统一致的复制/粘贴/撤销行为
  */
+
+/** 顶栏内嵌搜索：结果行内下拉，最多 8 条；更大范围交给 Ctrl+Shift+F 的完整面板 */
+const TOP_SEARCH_LIMIT = 8;
+
+const METHOD_COLORS = {
+  GET: 'gs-method-get',
+  POST: 'gs-method-post',
+  PUT: 'gs-method-put',
+  DELETE: 'gs-method-delete',
+  PATCH: 'gs-method-patch',
+  HEAD: 'gs-method-head',
+  OPTIONS: 'gs-method-options'
+};
+
+/**
+ * 顶栏搜索框：填掉菜单与右侧动作之间的空档。
+ * 索引与匹配复用 utils/requestSearch.js，与 Ctrl+Shift+F 浮层结果一致。
+ * 空查询不出下拉——没输入的列表只是噪音。
+ */
+function TopSearch({ collections, onOpenRequest, onOpenFullSearch }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const inputRef = useRef(null);
+  const boxRef = useRef(null);
+
+  const index = useMemo(() => buildRequestIndex(collections), [collections]);
+  const results = useMemo(() => searchRequests(index, query, TOP_SEARCH_LIMIT), [index, query]);
+  const q = query.trim();
+  // 结果变短时把光标夹回合法范围
+  const active = results.length ? Math.min(cursor, results.length - 1) : 0;
+
+  useEffect(() => { setCursor(0); }, [q]);
+
+  // 点击搜索框外部：收起下拉（保留已输入内容，便于再点回来接着看）
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (!(e.target instanceof Element)) return;
+      if (boxRef.current && boxRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const pick = (item) => {
+    if (!item) return;
+    setOpen(false);
+    setQuery('');
+    if (inputRef.current) inputRef.current.blur();
+    onOpenRequest && onOpenRequest(item.request);
+  };
+
+  const closeAll = () => {
+    setQuery('');
+    setOpen(false);
+    if (inputRef.current) inputRef.current.blur();
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (q) setCursor((c) => Math.min(c + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (q) setCursor((c) => Math.max(c - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (q) pick(results[active]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAll();
+    }
+  };
+
+  return (
+    <div className="top-search" ref={boxRef}>
+      <span className="top-search-icon"><JbIcon name="search" size={13} /></span>
+      <input
+        ref={inputRef}
+        className="top-search-input"
+        placeholder="搜索请求（名称 / URL / 参数 / Header）"
+        value={query}
+        spellCheck={false}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+      />
+      {q ? (
+        <button
+          className="top-search-tail top-search-clear"
+          title="清空"
+          tabIndex={-1}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { setQuery(''); if (inputRef.current) inputRef.current.focus(); }}
+        ><JbIcon name="close" size={12} /></button>
+      ) : (
+        <button
+          className="top-search-tail top-search-kbd"
+          title="打开完整搜索面板（搜索范围相同，结果不分页）"
+          tabIndex={-1}
+          onClick={() => { setOpen(false); if (inputRef.current) inputRef.current.blur(); onOpenFullSearch && onOpenFullSearch(); }}
+        >Ctrl+Shift+F</button>
+      )}
+
+      {open && q && (
+        <div className="top-search-pop">
+          {results.length === 0 && (
+            <div className="top-search-hint">未找到匹配「{q}」的请求</div>
+          )}
+          {results.map((item, i) => (
+            <div
+              key={item.id || i}
+              className={`top-search-item ${i === active ? 'active' : ''}`}
+              onMouseEnter={() => setCursor(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(item)}
+            >
+              <span className={`gs-method ${METHOD_COLORS[item.method] || ''}`}>{item.method}</span>
+              <span className="top-search-name" title={item.name}>{item.name}</span>
+              <span className="top-search-path" title={item.path}>{item.path}</span>
+            </div>
+          ))}
+          {results.length >= TOP_SEARCH_LIMIT && (
+            <div
+              className="top-search-more"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setOpen(false); if (inputRef.current) inputRef.current.blur(); onOpenFullSearch && onOpenFullSearch(); }}
+            >结果较多，在搜索面板中查看全部（Ctrl+Shift+F）</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** 菜单模型：sep 分隔线；kbd 快捷键提示；icon 为 JetBrains 图标名 */
 function buildMenus(handlers) {
@@ -46,6 +183,7 @@ function buildMenus(handlers) {
         { label: '切换控制台', onClick: handlers.onToggleConsole },
         { label: '切换侧栏', kbd: 'Alt+1', onClick: handlers.onToggleSidebar },
         { label: '命令面板', kbd: 'Ctrl+Shift+A', onClick: handlers.onOpenPalette },
+        { label: '全局搜索', kbd: 'Ctrl+Shift+F', onClick: handlers.onOpenFullSearch },
         { sep: true },
         { label: '开发者工具', onClick: () => window.api.toggleDevtools() }
       ]
@@ -73,7 +211,8 @@ function buildMenus(handlers) {
 export default function TopBar(props) {
   const {
     environments, activeEnvId, globals = [], onActivateEnv, onOpenGlobals, onManageEnvs,
-    onNewRequest, onNewWs, onNewSse, onNewMockRoute, onNewEnv, onImportCurl, onImportFile
+    onNewRequest, onNewWs, onNewSse, onNewMockRoute, onNewEnv, onImportCurl, onImportFile,
+    collections = [], onOpenRequest, onOpenFullSearch
   } = props;
   // 当前展开的下拉菜单：菜单 key | 'new' | 'env' | null
   const [menu, setMenu] = useState(null);
@@ -158,7 +297,14 @@ export default function TopBar(props) {
         ))}
       </nav>
 
-      <span className="flex-spacer" />
+      {/* 搜索框：占掉菜单与右侧动作之间的空档（原来是纯占位 spacer） */}
+      <div className="top-search-wrap">
+        <TopSearch
+          collections={collections}
+          onOpenRequest={onOpenRequest}
+          onOpenFullSearch={onOpenFullSearch}
+        />
+      </div>
 
       <span className="top-menu-anchor">
         <button

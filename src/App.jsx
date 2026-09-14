@@ -61,12 +61,13 @@ import {
   updateNode, removeNode, findNode, findOwnerCollection,
 
   upsertRequestById, removeRequestById, findRequestPath, findRequestById, moveRequest,
+  findRequestAncestorIds,
 
   exportCollection, exportWorkspace, exportEnvironment, exportEnvironments, parseImport, nameFromUrl
 
 } from './utils/collectionUtil.js';
 
-import { uriKey, findVariantGroup, variantLabel } from './utils/endpointUtil.js';
+import { historyMatches, findVariantGroup, variantLabel } from './utils/endpointUtil.js';
 
 import { newEnvironment, buildVarMap, resolveRequest, mergeVariables } from './utils/envUtil.js';
 
@@ -273,6 +274,9 @@ export default function App() {
 
   const [panelOpen, setPanelOpen] = useState(true); // 导航面板展开状态
 
+  // 「在集合中定位当前请求」信号：tick 递增一次即触发一次定位（同一请求连点两次也要生效）
+  const [reveal, setReveal] = useState({ reqId: null, tick: 0 });
+
   const [tabs, setTabs] = useState(() => [createTab(newRequest())]);
 
   const [tabGroups, setTabGroups] = useState([]); // 标签分组（Chrome 式）
@@ -399,6 +403,25 @@ export default function App() {
 
     else { setActivity(key); setPanelOpen(true); }
 
+  };
+
+  /**
+   * 「在集合中定位当前请求」：展开左侧集合树并把当前请求滚到视野内。
+   * 未保存的请求在树里没有节点，此时给出可操作提示而不是静默失败。
+   * 右侧工具条与集合面板标题栏共用这一个入口，保证两处行为一致。
+   */
+  const handleRevealActiveRequest = () => {
+    if (!activeRequest) {
+      showToast('当前标签不是请求，无法在集合中定位', 'warn');
+      return;
+    }
+    if (!findRequestAncestorIds(collections, activeRequest.id)) {
+      showToast('该请求尚未保存到集合（Ctrl+S 保存后可定位）', 'warn');
+      return;
+    }
+    setActivity('collections');
+    setPanelOpen(true);
+    setReveal((r) => ({ reqId: activeRequest.id, tick: r.tick + 1 }));
   };
 
 
@@ -1177,6 +1200,9 @@ export default function App() {
 
   const doSend = async (tabId, reqSnapshot) => {
 
+    // 发送即让位：侧边栏展开时自动收起，把宽度让给请求参数与响应
+    if (panelOpen) setPanelOpen(false);
+
     patchTab(tabId, { sending: true, response: null, scriptResult: null });
     try {
 
@@ -1507,9 +1533,10 @@ export default function App() {
     ? ((findVariantGroup(collections, activeRequest) || {}).members || [])
     : [];
 
-  // 当前接口的最近发送记录（同 method+path），供「历史」页签
-  const editorHistory = settings.workMode === 'endpoint' && activeRequest
-    ? history.filter((h) => uriKey(h) === uriKey(activeRequest)).slice(0, 20)
+  // 当前标签的最近发送记录，供「历史」页签（作用域随工作模式变化）
+  // 聚合：同接口（method+path）的所有变体发送；经典：这条请求记录自己的发送
+  const editorHistory = activeRequest
+    ? history.filter((h) => historyMatches(h, activeRequest, settings.workMode)).slice(0, 20)
     : [];
 
   /** 切换变体：目标已在某标签打开则聚焦；当前标签干净且已保存则原位替换，否则新开标签 */
@@ -1543,23 +1570,6 @@ export default function App() {
     })));
     showToast(`已存为变体「${variantLabel(req)}」`, 'success');
   };
-
-  /** 历史条目「应用为变体」：按当时的请求快照克隆新记录入组并打开 */
-  const handleApplyHistoryVariant = (item) => {
-    if (!activeRequest || !item) return;
-    const { responseSnapshot, requestId, time, status, timeMs, sizeBytes, ...rest } = item;
-    const req = normalizeRequest({ ...rest, id: uuid(), variantName: variantLabel(rest) });
-    const group = findVariantGroup(collections, activeRequest);
-    if (group) {
-      setCollections((prev) => updateNode(prev, group.node.id, (node) => ({
-        ...node,
-        requests: [...(node.requests || []), req]
-      })));
-    }
-    handleOpenRequest(req);
-    showToast(group ? `已应用为变体「${variantLabel(req)}」` : '已打开请求（未入集合）', 'success');
-  };
-
 
 
   const handleOpenRequest = (req) => {
@@ -3520,6 +3530,12 @@ export default function App() {
 
         onImportFile={handleImport}
 
+        collections={collections}
+
+        onOpenRequest={handleOpenRequest}
+
+        onOpenFullSearch={() => setGlobalSearchOpen(true)}
+
         onExportAll={handleExportAll}
 
         onBackup={handleBackupData}
@@ -3649,6 +3665,10 @@ export default function App() {
         noticeUnread={noticeUnread}
 
         onToggleNotices={handleToggleNotices}
+
+        reveal={reveal}
+
+        onRevealRequest={handleRevealActiveRequest}
 
       />
 
@@ -3861,8 +3881,6 @@ export default function App() {
                     onSaveVariant={handleSaveVariant}
 
                     requestHistory={editorHistory}
-
-                    onApplyHistoryVariant={handleApplyHistoryVariant}
 
                   />
 
@@ -4121,6 +4139,14 @@ export default function App() {
         varMap={buildVarMap(activeEnv, globals)}
 
         activeEnvName={activeEnv ? activeEnv.name : ''}
+
+        environments={environments}
+
+        activeEnvId={activeEnvId}
+
+        onSelectEnv={setActiveEnvId}
+
+        onRevealInTree={handleRevealActiveRequest}
 
       />
 

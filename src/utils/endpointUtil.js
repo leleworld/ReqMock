@@ -42,6 +42,23 @@ export function uriKey(item) {
   return `${method} ${path}`;
 }
 
+/**
+ * 「历史」页签的作用域判定：这条发送记录是否属于当前标签的流水。
+ *
+ * - endpoint（聚合）：接口视角 —— 同 method+path 的所有变体发送都算一条流水，
+ *   因为聚合模式下「同一接口」就是一个实体，域名/参数组合只是它的变体。
+ * - classic（经典）：记录视角 —— 每条请求一条记录，只算这条记录自己的发送，
+ *   按 requestId（发送时记录的原请求 id）匹配；保存不会换 id，所以历史能跨重启留存。
+ *   经典模式里用户常拿一条记录当草稿台反复改 URL/参数，这些尝试本就属于同一次调查。
+ * - 老数据没有 requestId 字段，回退到接口键匹配，避免历史凭空消失。
+ */
+export function historyMatches(item, request, mode) {
+  if (!item || !request) return false;
+  if (mode === 'endpoint') return uriKey(item) === uriKey(request);
+  if (item.requestId && request.id) return item.requestId === request.id;
+  return uriKey(item) === uriKey(request);
+}
+
 /** 变体展示名：优先用户命名 variantName，否则 host 短名 + query 摘要 */
 export function variantLabel(req) {
   if (!req) return '';

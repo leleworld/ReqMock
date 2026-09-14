@@ -6,11 +6,12 @@ import { JbIcon } from './Icons.jsx';
  * 右侧上下文工具条（Apifox/IDEA 式竖条）：
  * - 代码 / cURL：请求标签下直接触发生成代码弹窗、复制 cURL
  * - 文档 / 变量：以内嵌抽屉展开接口文档编辑与激活变量预览
+ * - 定位：回到左侧集合树中当前请求所在位置（未保存的请求给提示）
  */
 export default function UtilBar({
   isRequestTab, request, onChangeRequest,
   onCodegen, onCopyCurl, varMap, activeEnvName,
-  environments, activeEnvId, onSelectEnv
+  environments, activeEnvId, onSelectEnv, onRevealInTree
 }) {
   // 当前展开的抽屉：'doc' | 'vars' | null
   const [drawer, setDrawer] = useState(null);
@@ -164,6 +165,17 @@ export default function UtilBar({
         >
           <span className="util-icon"><JbIcon name="galaxy" size={14} /></span>
           <span className="util-label">变量</span>
+        </button>
+
+        {/* 导航类动作，与上面的请求工具分组：打开左侧集合并定位当前请求 */}
+        <span className="util-bar-sep" />
+        <button
+          className="util-btn"
+          title="在左侧集合树中定位当前请求"
+          onClick={onRevealInTree}
+        >
+          <span className="util-icon"><JbIcon name="locate" size={14} /></span>
+          <span className="util-label">定位</span>
         </button>
       </div>
     </>
