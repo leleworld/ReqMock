@@ -20,14 +20,14 @@ const LARGE_BODY_MAX_LINES = 5000;
 /** 页签/视图顺序：切换时据序号差决定滑动方向 */
 const RESP_TABS = ['body', 'headers', 'cookies', 'timings', 'trace', 'tests'];
 /** 响应体视图：美化视图按内容类型展示，原始视图看原始内容，Diff 对比历史响应 */
-const RESP_VIEWS = ['json', 'html', 'xml', 'javascript', 'raw', 'hex', 'base64', 'diff'];
+const RESP_VIEWS = ['json', 'html', 'xml', 'javascript', 'raw', 'hex', 'base64', 'preview', 'diff'];
 /** 美化类视图：走 CodeMirror 高亮 + 体内搜索 */
 const PRETTY_VIEWS = ['json', 'html', 'xml', 'javascript'];
 /** 视图切换按钮三组：美化视图 / 原始视图 / 对比，组间渲染分隔线（Diff 依赖历史响应，无基准时置灰） */
 const VIEW_GROUPS = [[
   ['json', 'JSON'], ['html', 'HTML'], ['xml', 'XML'], ['javascript', 'JavaScript'],
 ], [
-  ['raw', 'Raw'], ['hex', 'Hex'], ['base64', 'Base64'],
+  ['raw', 'Raw'], ['hex', 'Hex'], ['base64', 'Base64'], ['preview', '预览'],
 ], [
   ['diff', 'Diff']
 ]];
@@ -675,6 +675,17 @@ export default function ResponsePanel({
         )}
         {tab === 'body' && view === 'hex' && <DeferredMount><HexView text={response.body} /></DeferredMount>}
         {tab === 'body' && view === 'base64' && <DeferredMount><Base64View text={response.body} /></DeferredMount>}
+        {tab === 'body' && view === 'preview' && (
+          <div className="preview-view">
+            {response.bodyBase64 && /^image\//i.test((response.headers || {})['content-type'] || '') ? (
+              <img className="preview-img" src={`data:${(response.headers || {})['content-type']};base64,${response.bodyBase64}`} alt="响应图片" />
+            ) : response.body && /^\s*</.test(response.body) ? (
+              <iframe className="preview-frame" srcDoc={response.body} sandbox="" title="HTML 预览" />
+            ) : (
+              <div className="empty-hint">当前响应不支持预览（支持图片和 HTML 类型）</div>
+            )}
+          </div>
+        )}
         {tab === 'body' && view === 'diff' && <DiffView response={response} bases={diffBases} />}
         {tab === 'headers' && (
           <table className="headers-table">
