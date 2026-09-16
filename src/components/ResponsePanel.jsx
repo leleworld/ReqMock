@@ -70,7 +70,7 @@ function SendingTimer() {
  * 失败时展示诊断视图：错误解释 + 排查建议 + 实际发送的请求 + 重试/复制 cURL 等快捷动作
  */
 export default function ResponsePanel({
-  response, sending, scriptResult, onResponseToMock, onToast,
+  response, requestId, sending, scriptResult, onResponseToMock, onToast,
   layout, onToggleLayout, focused, onToggleFocus, historyList = [], onSelectHistory,
   onRetry, onRetryNoSsl, onOpenConsole,
   onSaveExample, onSaveBody, onExtractVariable, onInsertAssertion,
@@ -85,6 +85,13 @@ export default function ResponsePanel({
   const [regexOn, setRegexOn] = useState(false);
   const [hitIdx, setHitIdx] = useState(0);
   const [wrapOn, setWrapOn] = useState(true); // 正文自动换行开关
+
+  // 切换请求时清除搜索状态
+  const prevRequestIdRef = useRef(requestId);
+  if (requestId !== prevRequestIdRef.current) {
+    prevRequestIdRef.current = requestId;
+    if (searchOpen) { setSearchOpen(false); setQuery(''); setHitIdx(0); }
+  }
 
   // 自动检测响应格式，切换最合适的视图
   const prevResponseRef = useRef(null);

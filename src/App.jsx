@@ -3906,6 +3906,8 @@ export default function App() {
 
                 response={curTab.response}
 
+                requestId={activeRequest && activeRequest.id}
+
                 sending={curTab.sending}
 
                 fontSize={settings.fontSize}
