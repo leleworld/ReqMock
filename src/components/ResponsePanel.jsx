@@ -228,16 +228,16 @@ export default function ResponsePanel({
     if (!searchOpen || !PRETTY_VIEWS.includes(view) || !query) return null;
     try {
       const src = regexOn ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return { query: new RegExp(src, caseSense ? 'g' : 'gi'), activeIdx: hitCount > 0 ? curHit : -1 };
+      return { query: new RegExp(src, caseSense ? 'g' : 'gi'), activeIdx: hitCount > 0 ? curHit : -1, _seq: hitIdx };
     } catch (_e) { return null; }
-  }, [searchOpen, view, query, caseSense, regexOn, curHit, hitCount]);
+  }, [searchOpen, view, query, caseSense, regexOn, curHit, hitCount, hitIdx]);
 
-  // 当前命中滚动到可视区域中央（非 Pretty 视图用 DOM scrollIntoView）
+  // 当前命中滚动到可视区域中央（非 Pretty 视图用 DOM scrollIntoView；依赖 hitIdx 确保单结果时按上下键也能重新定位）
   useEffect(() => {
     if (PRETTY_VIEWS.includes(view) || !contentRef.current) return;
     const el = contentRef.current.querySelector('.search-hit-active');
     if (el) el.scrollIntoView({ block: 'center' });
-  }, [curHit, searchInfo, view]);
+  }, [hitIdx, curHit, searchInfo, view]);
 
   // 打开搜索栏时聚焦输入框
   useEffect(() => {
