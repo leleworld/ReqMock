@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld('api', {
   stopMock: () => ipcRenderer.invoke('mock:stop'),
   mockStatus: () => ipcRenderer.invoke('mock:status'),
   updateMockRoutes: (routes) => ipcRenderer.invoke('mock:updateRoutes', routes),
+  openMetricsReport: () => ipcRenderer.invoke('metrics:report'),
+  analyzeMetrics: (opts) => ipcRenderer.invoke('metrics:analyze', opts),
+  aiAnalyze: (arg) => ipcRenderer.invoke('ai:analyze', arg),
+  aiAbort: (id) => ipcRenderer.invoke('ai:abort', id),
+  onAiDelta: (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on('ai:delta', listener);
+    return () => ipcRenderer.removeListener('ai:delta', listener);
+  },
 
   // WebSocket / SSE 实时连接
   wsConnect: (config) => ipcRenderer.invoke('ws:connect', config),

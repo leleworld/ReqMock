@@ -4060,7 +4060,14 @@ export default function App() {
 
         )}
 
-        {curTab.kind === 'tool' && <ToolsPanel tool={curTab.tool} />}
+        {curTab.kind === 'tool' && (
+          <ToolsPanel
+            tool={curTab.tool}
+            history={curTab.tool === 'analysis' ? history : undefined}
+            collections={curTab.tool === 'analysis' ? collections : undefined}
+            workMode={curTab.tool === 'analysis' ? settings.workMode : undefined}
+          />
+        )}
 
         {curTab.kind === 'runner' && (
 

@@ -13,6 +13,7 @@ import { INTROSPECTION_QUERY, parseIntrospection, buildOperationSkeleton, buildV
 import { resolveVars } from '../utils/envUtil.js';
 import { applyPresetToHeaders } from '../utils/headerPresets.js';
 import { applyPresetToParams } from '../utils/paramPresets.js';
+import { diffJson, parseSnapJson, fmtDiffValue } from '../utils/responseDiff.js';
 import { SCRIPT_TEMPLATES } from '../utils/scriptTemplates.js';
 import { diffRequests, describeChange, changeLabel, shortenValue } from '../utils/requestDelta.js';
 
@@ -1336,6 +1337,17 @@ function EditorHistoryPane({ items, workMode = 'classic' }) {
       </div>
     );
   }
+  // ---- 顶部统计条：几次成功/失败、耗时分布、最近响应差异 ----
+  const badCount = items.filter((it) => it.status === 'ERR' || (typeof it.status === 'number' && it.status >= 400)).length;
+  const times = items.map((it) => it.timeMs).filter((t) => typeof t === 'number');
+  const avgMs = times.length ? Math.round(times.reduce((s, t) => s + t, 0) / times.length) : 0;
+  const sortedT = [...times].sort((a, b) => a - b);
+  const p95 = sortedT.length ? sortedT[Math.min(sortedT.length - 1, Math.floor(0.95 * sortedT.length))] : 0;
+  const last = items[0];
+  const prev = items[1] || null;
+  const lastJa = prev ? parseSnapJson(prev.responseSnapshot) : null;
+  const lastJb = parseSnapJson(last.responseSnapshot);
+  const respDiff = (lastJa && lastJb) ? diffJson(lastJa, lastJb) : null;
   const hostOf = (url) => {
     const m = String(url || '').match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^/?#\s]+)/);
     return m ? m[1] : '';
@@ -1356,6 +1368,22 @@ function EditorHistoryPane({ items, workMode = 'classic' }) {
         <span className="editor-history-scope-hint">
           {endpointMode ? '不同域名/参数组合即变体' : '改 URL、改参数都算同一次调查'}
         </span>
+      </div>
+      {/* 请求分析统计条 */}
+      <div className="eh-stats">
+        <span className={`eh-stat ${badCount ? 'eh-stat-bad' : 'eh-stat-good'}`}>
+          {items.length - badCount}/{items.length} 成功
+        </span>
+        <span className="eh-stat">平均 {avgMs}ms</span>
+        {times.length > 1 && <span className="eh-stat">P95 {p95}ms</span>}
+        {times.length > 1 && (
+          <span className="eh-stat">最快 {sortedT[0]}ms / 最慢 {sortedT[sortedT.length - 1]}ms</span>
+        )}
+        {respDiff && (
+          <span className={`eh-stat ${respDiff.length ? 'eh-stat-bad' : 'eh-stat-good'}`}>
+            最近两次响应：{respDiff.length ? `${respDiff.length} 处差异` : '完全一致'}
+          </span>
+        )}
       </div>
       {items.map((item, i) => {
         const bad = item.status === 'ERR' || (typeof item.status === 'number' && item.status >= 400);
@@ -1435,6 +1463,45 @@ function EditorHistoryPane({ items, workMode = 'classic' }) {
                     )}
                   </div>
                 )}
+                {prev && (() => {
+                  const ja = parseSnapJson(prev.responseSnapshot);
+                  const jb = parseSnapJson(item.responseSnapshot);
+                  if (!ja || !jb) return null;
+                  const ds = diffJson(ja, jb);
+                  return (
+                    <div className="editor-history-section">
+                      <div className="editor-history-section-head">
+                        {ds.length
+                          ? `响应差异（对比 ${fmtTime(prev.time)}，${ds.length} 处，已过滤 signatureServer/traceSign）`
+                          : `响应与 ${fmtTime(prev.time)} 完全一致`}
+                      </div>
+                      {ds.length > 0 && (
+                        <div className="editor-history-changes">
+                          {ds.slice(0, 30).map(([p, va, vb]) => (
+                            <React.Fragment key={p}>
+                              <div className="eh-line del">
+                                <span className="eh-sign">−</span>
+                                <span className="eh-name">{p}</span>
+                                <span>{fmtDiffValue(va)}</span>
+                              </div>
+                              <div className="eh-line add">
+                                <span className="eh-sign">+</span>
+                                <span className="eh-name">{p}</span>
+                                <span>{fmtDiffValue(vb)}</span>
+                              </div>
+                            </React.Fragment>
+                          ))}
+                          {ds.length > 30 && (
+                            <div className="eh-line">
+                              <span className="eh-sign">…</span>
+                              <span className="eh-name">其余 {ds.length - 30} 处略</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {snap && (
                   <div className="editor-history-snap">
                     <div className="editor-history-snap-head">

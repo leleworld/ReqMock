@@ -29,6 +29,8 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { sendHttpRequest } = require('./httpClient.cjs');
 const { MockServer } = require('./mockServer.cjs');
+const { configureMetrics, readMetrics, historyToMetrics, normalizeRun, renderReportHTML, analyze, buildAiContext } = require('./metrics.cjs');
+const { chatStream, abortChat } = require('./aiAssist.cjs');
 const { WsManager } = require('./wsClient.cjs');
 const { SseManager } = require('./sseClient.cjs');
 const { Store } = require('./store.cjs');
@@ -215,6 +217,53 @@ function registerIpc() {
   ipcMain.handle('sse:connect', async (event, config) => sseManager.connect(config));
   ipcMain.handle('sse:close', async (event, id) => sseManager.close(id));
 
+  // ---- 流量报告：聚合埋点 + 旧 history，生成 HTML 返回渲染层内嵌展示（不跳外部浏览器） ----
+  ipcMain.handle('metrics:report', async () => {
+    try {
+      const runs = [...historyToMetrics((store.load() || {}).history), ...readMetrics()].map(normalizeRun);
+      if (!runs.length) return { ok: false, error: '暂无埋点数据（发送过请求后再试）' };
+      const html = renderReportHTML(runs);
+      return { ok: true, html, total: runs.length };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ---- 接口分析：GUI 内嵌页调用，返回与 HTML 报告同源的 analyze() 结果（含 insights/钻取 runs） ----
+  ipcMain.handle('metrics:analyze', async (event, opts = {}) => {
+    const runs = [...historyToMetrics((store.load() || {}).history), ...readMetrics()].map(normalizeRun);
+    let from = 0;
+    if (opts.days) { const mx = runs.reduce((m, r) => Math.max(m, r.ts), 0); from = mx - opts.days * 86400000; }
+    return analyze(runs, { from, src: opts.src, host: opts.host });
+  });
+
+  // ---- AI 分析：把引擎结果交千问，流式回传渲染层（连接参数取 store.settings.ai） ----
+  const AI_SYS = '你是接口调试分析助手，服务于一个 SearchApi/媒资方向的开发者。基于给定的请求埋点统计与差异证据，用中文给出：1) 关键异常与最可能的根因（要判断，不要只复述数字）；2) 影响面；3) 下一步排查建议（具体到查哪个参数/接口/环境）。简洁分点，控制在 300 字内。';
+  ipcMain.handle('ai:analyze', async (event, { id, kind, filter, key } = {}) => {
+    const ai = ((store.load() || {}).settings || {}).ai || {};
+    if (!ai.enabled || !ai.baseUrl || !ai.apiKey) {
+      return { ok: false, error: 'AI 未配置：请到 设置 → AI 分析 填写 Base URL、API Key 并启用' };
+    }
+    const runs = [...historyToMetrics((store.load() || {}).history), ...readMetrics()].map(normalizeRun);
+    let from = 0;
+    const f = filter || {};
+    if (f.days) { const mx = runs.reduce((m, r) => Math.max(m, r.ts), 0); from = mx - f.days * 86400000; }
+    const stats = analyze(runs, { from, src: f.src, host: f.host });
+    const context = buildAiContext(kind, stats, key);
+    const messages = [
+      { role: 'system', content: AI_SYS },
+      { role: 'user', content: context }
+    ];
+    const sender = event.sender;
+    const r = await chatStream({
+      id, baseUrl: ai.baseUrl, apiKey: ai.apiKey, model: ai.model, messages,
+      onDelta: (text) => { if (sender && !sender.isDestroyed()) sender.send('ai:delta', { id, text }); }
+    });
+    return r;
+  });
+  ipcMain.handle('ai:abort', async (event, id) => { abortChat(id); return { ok: true }; });
+
+
   // ---- 文件导入 / 导出 ----
   ipcMain.handle('file:export', async (event, { defaultName, content, encoding }) => {
     // 按扩展名生成保存过滤器（支持 json/md/html/txt 等任意扩展名，响应体下载复用此通道）
@@ -344,6 +393,8 @@ app.whenReady().then(() => {
     { role: 'editMenu' }
   ]));
   store = new Store(path.join(app.getPath('userData'), 'reqmock-store.json'));
+  // 流量埋点：与 store 同目录的独立 JSONL，GUI / Runner / skill CLI 全量捕获
+  configureMetrics(path.join(app.getPath('userData'), 'reqmock-metrics.jsonl'));
   try {
     const state = store.load();
     if (state && state.settings && state.settings.accent) setAppIcon(state.settings.accent);

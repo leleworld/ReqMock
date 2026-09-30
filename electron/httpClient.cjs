@@ -32,7 +32,7 @@ const MAX_REDIRECTS = 10;
  *            timings, trace, setCookies, httpVersion }
  *          或 { ok:false, error, errorCode, syscall, address, port, phase, timeMs, trace }
  */
-async function sendHttpRequest(payload, signal) {
+async function sendHttpRequestImpl(payload, signal) {
   const {
     method = 'GET', url, headers = [], params = [],
     bodyType = 'none', body = '', formData = [], graphql = null,
@@ -499,6 +499,16 @@ function decompressBody(buffer, encoding) {
 
 function hasHeader(headers, name) {
   return Object.keys(headers).some(k => k.toLowerCase() === name.toLowerCase());
+}
+
+// ---- 流量埋点包装：所有请求（GUI 单发 / Runner 批量 / skill CLI）的唯一出口 ----
+// metrics 未 configure 时 recordMetrics 静默跳过，不影响单测与无埋点场景
+const { recordMetrics } = require('./metrics.cjs');
+
+async function sendHttpRequest(payload, signal) {
+  const result = await sendHttpRequestImpl(payload, signal);
+  recordMetrics(payload, result);
+  return result;
 }
 
 module.exports = { sendHttpRequest };

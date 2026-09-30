@@ -264,6 +264,53 @@ export default function SettingsPage({ settings, onChange, onBackup, onRestore, 
             </div>
           </section>
 
+          {/* ── AI 分析 ── */}
+          <section className="sp-section">
+            <div className="sp-section-left">
+              <h2 className="sp-section-title">AI 分析</h2>
+              <p className="sp-section-desc">流量报告 / 接口分析页内实时调用千问（OpenAI 兼容端点）</p>
+            </div>
+            <div className="sp-section-right">
+              <div className="sp-item sp-item-row">
+                <div>
+                  <span className="sp-item-title">启用</span>
+                  <span className="sp-item-desc">关闭时分析页不发起模型请求</span>
+                </div>
+                <label className="sp-toggle">
+                  <input type="checkbox" checked={!!(settings.ai && settings.ai.enabled)} onChange={(e) => onChange({ ai: { ...(settings.ai || {}), enabled: e.target.checked } })} />
+                  <span className="sp-toggle-slider" />
+                </label>
+              </div>
+
+              <div className="sp-item sp-item-row">
+                <div>
+                  <span className="sp-item-title">Base URL</span>
+                  <span className="sp-item-desc">OpenAI 兼容端点，默认阿里云 DashScope compatible-mode</span>
+                </div>
+                <input className="sp-input" type="text" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                  value={(settings.ai && settings.ai.baseUrl) || ''} onChange={(e) => onChange({ ai: { ...(settings.ai || {}), baseUrl: e.target.value } })} />
+              </div>
+
+              <div className="sp-item sp-item-row">
+                <div>
+                  <span className="sp-item-title">API Key</span>
+                  <span className="sp-item-desc">仅存本地，随请求以 Bearer 发送</span>
+                </div>
+                <input className="sp-input" type="password" placeholder="sk-…"
+                  value={(settings.ai && settings.ai.apiKey) || ''} onChange={(e) => onChange({ ai: { ...(settings.ai || {}), apiKey: e.target.value } })} />
+              </div>
+
+              <div className="sp-item sp-item-row">
+                <div>
+                  <span className="sp-item-title">模型</span>
+                  <span className="sp-item-desc">如 qwen-plus / qwen-max</span>
+                </div>
+                <input className="sp-input" type="text" placeholder="qwen-plus"
+                  value={(settings.ai && settings.ai.model) || ''} onChange={(e) => onChange({ ai: { ...(settings.ai || {}), model: e.target.value } })} />
+              </div>
+            </div>
+          </section>
+
           {/* ── 数据 ── */}
           <section className="sp-section">
             <div className="sp-section-left">
