@@ -114,6 +114,17 @@ export async function executeRequest(reqSnapshot, ctx) {
     }
   }
 
+  // 3.6 Body 注释剥离：发送前移除 JSON/文本 body 中的 // 行注释（保留字符串内的 //）
+  if (finalReq.body && typeof finalReq.body === 'string' && finalReq.bodyType !== 'none') {
+    const stripped = finalReq.body
+      .split('\n')
+      .filter((line) => !/^\s*\/\//.test(line))
+      .join('\n');
+    if (stripped !== finalReq.body) {
+      finalReq = { ...finalReq, body: stripped };
+    }
+  }
+
   // 4. 发送
   // 注入 settings 中的网络配置到发送 payload
   const netOpts = {};
