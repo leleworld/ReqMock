@@ -653,8 +653,10 @@ export default function ResponsePanel({
               <div className="large-body-banner">
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
-                <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
-                <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                <span className="large-body-actions">
+                  <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
+                  <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                </span>
               </div>
             )}
             <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD && !showFullBody ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={view === 'json' ? (isJsonBody ? 'json' : 'text') : view === 'javascript' ? 'javascript' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
@@ -666,8 +668,10 @@ export default function ResponsePanel({
               <div className="large-body-banner">
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
-                <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
-                <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                <span className="large-body-actions">
+                  <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
+                  <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                </span>
               </div>
             )}
             <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>

@@ -10877,9 +10877,11 @@ body::after {
 
 .large-body-banner .btn-secondary {
 
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: 12px;
 
-  margin-left: auto; padding: 3px 10px; font-size: 12px;
+}
+.large-body-actions {
+  display: flex; gap: 6px; margin-left: auto; flex-shrink: 0;
 
 }
 
