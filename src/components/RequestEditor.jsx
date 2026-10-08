@@ -460,26 +460,7 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
       });
       const jsonStr = jsonLines.join('\n').trim();
       if (!jsonStr) { setFmtError('无可格式化的 JSON 内容'); return; }
-      let toParse = jsonStr;
-      // 如果直接解析失败，用花括号匹配提取第一个完整 JSON
-      try {
-        JSON.parse(toParse);
-      } catch (_) {
-        const open = toParse.charAt(0) === '[' ? '[' : '{';
-        const close = open === '[' ? ']' : '}';
-        let depth = 0, end = -1, inStr = false, esc = false;
-        for (let i = 0; i < toParse.length; i++) {
-          const c = toParse[i];
-          if (esc) { esc = false; continue; }
-          if (c === '\\') { esc = true; continue; }
-          if (c === '"') { inStr = !inStr; continue; }
-          if (inStr) continue;
-          if (c === open) depth++;
-          else if (c === close) { depth--; if (depth === 0) { end = i + 1; break; } }
-        }
-        if (end > 0) toParse = toParse.slice(0, end).trim();
-      }
-      const formatted = JSON.stringify(JSON.parse(toParse), null, 2);
+      const formatted = JSON.stringify(JSON.parse(jsonStr), null, 2);
       const result = commentLines.length > 0
         ? formatted + '\n' + commentLines.map((c) => c.line).join('\n')
         : formatted;

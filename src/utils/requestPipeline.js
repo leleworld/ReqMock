@@ -121,25 +121,14 @@ export async function executeRequest(reqSnapshot, ctx) {
       .filter((line) => !/^\s*\/\//.test(line))
       .join('\n')
       .trim();
-    // JSON body：用花括号匹配提取第一个完整 JSON 对象/数组
+    // JSON body：确保发送的是合法 JSON（剥离注释后可能残留多余内容）
     if (finalReq.bodyType === 'json' && stripped) {
       try {
         JSON.parse(stripped);
       } catch (e) {
-        // 花括号/方括号计数提取第一个完整 JSON
-        const open = stripped.charAt(0) === '[' ? '[' : '{';
-        const close = open === '[' ? ']' : '}';
-        let depth = 0, end = -1, inStr = false, esc = false;
-        for (let i = 0; i < stripped.length; i++) {
-          const c = stripped[i];
-          if (esc) { esc = false; continue; }
-          if (c === '\\') { esc = true; continue; }
-          if (c === '"') { inStr = !inStr; continue; }
-          if (inStr) continue;
-          if (c === open) depth++;
-          else if (c === close) { depth--; if (depth === 0) { end = i + 1; break; } }
-        }
-        if (end > 0) stripped = stripped.slice(0, end).trim();
+        // 尝试提取第一个完整 JSON 对象/数组
+        const m = stripped.match(/^[\s\n]*(\{[\s\S]*?\n\}|^\[[\s\S]*?\n\])/m);
+        if (m) stripped = m[1].trim();
       }
     }
     if (stripped !== finalReq.body.trim()) {
