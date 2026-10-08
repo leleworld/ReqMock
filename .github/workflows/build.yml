@@ -50,5 +50,6 @@ jobs:
           files: |
             release/*.exe
             release/*.blockmap
+            release/*.yml
           draft: false
           generate_release_notes: true
