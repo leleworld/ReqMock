@@ -451,7 +451,20 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   /** JSON Body 一键格式化 */
   const handleFormatJson = () => {
     try {
-      set('body', JSON.stringify(JSON.parse(request.body), null, 2));
+      const lines = request.body.split('\n');
+      const commentLines = [];
+      const jsonLines = [];
+      lines.forEach((line, i) => {
+        if (/^\s*\/\//.test(line)) commentLines.push({ idx: i, line });
+        else jsonLines.push(line);
+      });
+      const jsonStr = jsonLines.join('\n').trim();
+      if (!jsonStr) { setFmtError('无可格式化的 JSON 内容'); return; }
+      const formatted = JSON.stringify(JSON.parse(jsonStr), null, 2);
+      const result = commentLines.length > 0
+        ? formatted + '\n' + commentLines.map((c) => c.line).join('\n')
+        : formatted;
+      set('body', result);
       setFmtError('');
     } catch (e) {
       setFmtError(e.message);
