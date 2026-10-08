@@ -119,7 +119,9 @@ export async function executeRequest(reqSnapshot, ctx) {
     const stripped = finalReq.body
       .split('\n')
       .filter((line) => !/^\s*\/\//.test(line))
-      .join('\n');
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     if (stripped !== finalReq.body) {
       finalReq = { ...finalReq, body: stripped };
     }
