@@ -91,6 +91,7 @@ export default function ResponsePanel({
   if (requestId !== prevRequestIdRef.current) {
     prevRequestIdRef.current = requestId;
     if (searchOpen) { setSearchOpen(false); setQuery(''); setHitIdx(0); }
+    setShowFullBody(false);
   }
 
   // 自动检测响应格式，切换最合适的视图
@@ -110,6 +111,7 @@ export default function ResponsePanel({
   }
 
   const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
+  const [showFullBody, setShowFullBody] = useState(false); // 加载所有内容
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
   const paneKey = `${tab}-${view}`;
@@ -647,27 +649,29 @@ export default function ResponsePanel({
         {/* 美化视图（JSON/HTML/XML/JavaScript）：始终使用 CodeMirror（内置 Ctrl+F 搜索 + 行号 + 层级折叠），避免自定义 mark 渲染大 JSON 时卡顿 */}
         {tab === 'body' && PRETTY_VIEWS.includes(view) && (
           <DeferredMount>
-            {response.body.length > LARGE_BODY_THRESHOLD && (
+            {response.body.length > LARGE_BODY_THRESHOLD && !showFullBody && (
               <div className="large-body-banner">
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
+                <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
                 <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
               </div>
             )}
-            <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={view === 'json' ? (isJsonBody ? 'json' : 'text') : view === 'javascript' ? 'javascript' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
+            <CodeEditor className="response-code" value={response.body.length > LARGE_BODY_THRESHOLD && !showFullBody ? prettyBody.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n') : prettyBody} language={view === 'json' ? (isJsonBody ? 'json' : 'text') : view === 'javascript' ? 'javascript' : 'text'} readOnly lineWrap={wrapOn} searchQuery={cmSearchQuery} fontSize={fontSize} tabSize={tabSize} wordWrap={wordWrap} showLineNumbers={showLineNumbers} />
           </DeferredMount>
         )}
         {tab === 'body' && view === 'raw' && (
           <DeferredMount>
-            {response.body.length > LARGE_BODY_THRESHOLD && (
+            {response.body.length > LARGE_BODY_THRESHOLD && !showFullBody && (
               <div className="large-body-banner">
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
+                <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
                 <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
               </div>
             )}
             <pre className={wrapOn ? 'response-body' : 'response-body nowrap'}>
-              {response.body.length > LARGE_BODY_THRESHOLD
+              {response.body.length > LARGE_BODY_THRESHOLD && !showFullBody
                 ? response.body.split('\n').slice(0, LARGE_BODY_MAX_LINES).join('\n')
                 : renderBodyText()}
             </pre>
