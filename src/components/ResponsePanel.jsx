@@ -92,6 +92,7 @@ export default function ResponsePanel({
     prevRequestIdRef.current = requestId;
     if (searchOpen) { setSearchOpen(false); setQuery(''); setHitIdx(0); }
     setShowFullBody(false);
+    setLoadingFull(false);
   }
 
   // 自动检测响应格式，切换最合适的视图
@@ -112,6 +113,14 @@ export default function ResponsePanel({
 
   const [decodeTip, setDecodeTip] = useState(null); // { kind, text, x, y }
   const [showFullBody, setShowFullBody] = useState(false); // 加载所有内容
+  const [loadingFull, setLoadingFull] = useState(false);
+  const handleLoadFull = () => {
+    setLoadingFull(true);
+    // 延迟一帧让 loading 状态先渲染，再加载大内容
+    requestAnimationFrame(() => {
+      setTimeout(() => { setShowFullBody(true); setLoadingFull(false); }, 50);
+    });
+  };
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
   const paneKey = `${tab}-${view}`;
@@ -654,8 +663,8 @@ export default function ResponsePanel({
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
                 <span className="large-body-actions">
-                  <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
-                  <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                  <button className="btn-secondary" disabled={loadingFull} onClick={handleLoadFull}>{loadingFull ? <><span className="btn-ring" /> 加载中…</> : '加载所有内容'}</button>
+                  <button className="btn-secondary" onClick={handleDownload}>下载完整响应</button>
                 </span>
               </div>
             )}
@@ -669,8 +678,8 @@ export default function ResponsePanel({
                 <JbIcon name="warning" size={14} />
                 <span>响应体较大（{(response.body.length / 1024 / 1024).toFixed(2)} MB），仅显示前 {LARGE_BODY_MAX_LINES} 行</span>
                 <span className="large-body-actions">
-                  <button className="btn-secondary" onClick={() => setShowFullBody(true)}>加载所有内容</button>
-                  <button className="btn-secondary" onClick={handleDownload}><JbIcon name="download" size={12} /> 下载完整响应</button>
+                  <button className="btn-secondary" disabled={loadingFull} onClick={handleLoadFull}>{loadingFull ? <><span className="btn-ring" /> 加载中…</> : '加载所有内容'}</button>
+                  <button className="btn-secondary" onClick={handleDownload}>下载完整响应</button>
                 </span>
               </div>
             )}
