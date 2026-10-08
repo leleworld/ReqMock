@@ -452,19 +452,28 @@ export default function RequestEditor({ request, varNames = [], varMap = {}, own
   const handleFormatJson = () => {
     try {
       const lines = request.body.split('\n');
-      const commentLines = [];
-      const jsonLines = [];
-      lines.forEach((line, i) => {
-        if (/^\s*\/\//.test(line)) commentLines.push({ idx: i, line });
-        else jsonLines.push(line);
-      });
-      const jsonStr = jsonLines.join('\n').trim();
-      if (!jsonStr) { setFmtError('无可格式化的 JSON 内容'); return; }
+      // 找到第一个非注释行中 { 或 [ 的位置（JSON 起始行）
+      let jsonStart = -1, jsonEnd = -1;
+      let depth = 0, open = '', close = '';
+      for (let i = 0; i < lines.length; i++) {
+        if (/^\s*\/\//.test(lines[i])) continue; // 跳过注释行
+        for (const c of lines[i]) {
+          if (!open && (c === '{' || c === '[')) { open = c; close = c === '{' ? '}' : ']'; jsonStart = i; }
+          if (open) {
+            if (c === open) depth++;
+            else if (c === close) { depth--; if (depth === 0) { jsonEnd = i; break; } }
+          }
+        }
+        if (jsonEnd >= 0) break;
+      }
+      if (jsonStart < 0 || jsonEnd < 0) { setFmtError('未找到完整的 JSON 内容'); return; }
+      const jsonStr = lines.slice(jsonStart, jsonEnd + 1).join('\n');
       const formatted = JSON.stringify(JSON.parse(jsonStr), null, 2);
-      const result = commentLines.length > 0
-        ? formatted + '\n' + commentLines.map((c) => c.line).join('\n')
-        : formatted;
-      set('body', result);
+      // 原位替换：保留 JSON 前面和后面的所有内容（注释等）
+      const before = lines.slice(0, jsonStart).join('\n');
+      const after = lines.slice(jsonEnd + 1).join('\n');
+      const parts = [before, formatted, after].filter(Boolean);
+      set('body', parts.join('\n'));
       setFmtError('');
     } catch (e) {
       setFmtError(e.message);
